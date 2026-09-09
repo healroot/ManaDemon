@@ -33,7 +33,7 @@ the settings merged into four groups — level 1 vertical on the left, level 2 h
 deeper levels in a box that repeats the rule — on the settings palette) is specified in
 `docs/SPEC-v0.11.md`**.
 
-**Session continuity:** past work sessions are logged in **`docs/HISTORY.md`** (what was done, project state, next steps). Read it at the start of a session to recover context, and append a dated entry when a session ends with meaningful progress — this is the project's memory across conversations. **`docs/PLAN.md`** is the agreed roadmap (Phase 1 druid verification + improvements, Phase 2 other classes) — tick items there as they land. **`docs/TESTING.md`** tells the author what to test in-game and how to report it.
+**Session continuity:** past work sessions are logged in **`docs/HISTORY.md`** (what was done, project state, next steps). Read it at the start of a session to recover context, and append a dated entry when a session ends with meaningful progress — this is the project's memory across conversations. **`docs/PLAN.md`** is the agreed roadmap (Phase 1 druid verification + improvements, Phase 2 other classes) — tick items there as they land. **`docs/TESTING.md`** tells the author what to test in-game and how to report it. **`docs/TOOLS.md`** is the reference for `tools/` — every suite, every offline command and every Warcraft Logs step, with the invocations.
 
 ## Repo structure and load order
 
