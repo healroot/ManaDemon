@@ -271,6 +271,10 @@ read only what a human can see.
 - [x] **v0.13.8** `CoachRun` gives its plan to every pull, so a coached run actually draws
   a suggested column; `/md coachrun N force` for the pulls that do not replay.
   *(2026-09-09; it was writing only `SP.runPlans`, so the answer was 0 of 36.)*
+- [x] **v0.13.9** one command: opening a replay coaches it, so validate/coach/play collapses
+  into `/md replay N`. A fight that does not replay still is not coached silently -- the hint
+  names the failing gate and the `force` spelling -- and an explicit Coach cancels the
+  automatic one. `db.replayAutoCoach`. *(2026-09-09.)*
 - [ ] **v0.14.0** the continuous run replay: the run's clock, not the pull's, with a gap
   state driven from `run.hp` / `run.mana` and the run strip as its scrubber
   (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health.

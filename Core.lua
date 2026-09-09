@@ -64,6 +64,8 @@ local DEFAULTS = {
     replaySpeed = 1,          -- the replay window's last playback speed (1, 2 or 4)
     replayTicks = true,       -- draw the recorder's real HP snapshots over the left bars
     replayNextPull = true,    -- inside a run, playing a pull to the end opens the next one
+    replayAutoCoach = true,   -- opening a replay with no plan coaches it (v0.13.9): validate,
+                              -- coach and play were three commands to answer one question
     simBigHit = 0.15,         -- a single hit worth this much of a target's max health is a "big hit"
                               -- when a preset is derived from recordings (v0.7.7)
     simUtilityPerFight = nil, -- derived: median utility mana per fight, applied as a lump in

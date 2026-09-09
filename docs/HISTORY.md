@@ -2802,3 +2802,31 @@ Coaching still does not open the replay. The card names the pulls worth looking 
 following it shows something.
 
 11 suites green.
+
+## 2026-09-09 — v0.13.9: one command
+
+The author: "I would like to make it simplier, it a cumbersome to run validate then coach
+then play." It was, and two of those three commands existed only because the third had
+nothing to draw.
+
+**Opening a replay now coaches it.** `MD:CoachOnOpen` fires when the window opens on a fight
+with no plan: validation happens inside the search, the window opens immediately with the
+left column ready, and the suggested column appears when the frame-sliced search finishes.
+Cached per recording, so it happens once per fight, and never in combat. `db.replayAutoCoach`
+turns it off.
+
+The v0.9.6 rule survives -- a fight that does not replay is not coached silently, because
+advice the engine got wrong is worse than none -- but the refusal now carries everything
+needed to act on it:
+
+```
+does not replay (mana mean) - /md replay 12 force coaches it anyway
+```
+
+**And a real interaction bug the suites caught**: opening the window starts a background
+search, so pressing Coach in the Review tab was answered with "already searching" -- our
+automatic search blocking the author's explicit one. Theirs wins now; ours is cancelled.
+That is exactly the kind of regression an offline UI suite exists for, and `reviewui` failed
+on it within a minute of the change.
+
+replayui 84 -> 87, reviewui 43 -> 44. 11 suites green.

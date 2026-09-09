@@ -340,5 +340,19 @@ for _, f in ipairs(S.allFrames) do
 end
 check("no bare pipe in any painted string", #bad == 0, bad[1])
 
+--------------------------------------------------------------------------------
+-- v0.13.9: opening a replay coaches in the background. That must not get in the
+-- way of the author pressing Coach -- theirs wins and cancels ours.
+--------------------------------------------------------------------------------
+do
+    MD.coachSearch = { Cancel = function() end }
+    MD.replayCoaching = 12345
+    MD:RunCoach("1 force")
+    check("an explicit coach cancels the automatic one",
+        MD.replayCoaching == nil, tostring(MD.replayCoaching))
+    if MD.coachSearch and MD.coachSearch.Cancel then MD.coachSearch:Cancel() end
+    MD.coachSearch = nil
+end
+
 print(string.format("\n%d ok, %d failed", ok, #fails))
 if #fails > 0 then for _, m in ipairs(fails) do print("  FAIL " .. m) end; os.exit(1) end

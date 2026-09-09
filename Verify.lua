@@ -1347,6 +1347,12 @@ function MD:RunCoach(arg)
             return
         end
     end
+    -- v0.13.9: an auto-coach kicked off by opening the replay must not block the
+    -- author asking for one. Theirs wins: cancel ours and run it.
+    if MD.coachSearch and MD.replayCoaching then
+        MD.coachSearch:Cancel()
+        MD.coachSearch, MD.replayCoaching = nil, nil
+    end
     if MD.coachSearch then MD:Print("coach: already searching (/md coach cancel).") return end
 
     local function Show(lines)

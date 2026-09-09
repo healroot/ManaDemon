@@ -228,8 +228,37 @@ SP.plans[rec.id] = nil
 MD:OpenReplay(1)
 W = MD.Replay._state()
 check("left only without a plan", W.right.state == nil and not W.right.title:IsShown())
-check("hint says to coach first", W.frame.hint:GetText():find("Coach") ~= nil, W.frame.hint:GetText())
+-- v0.13.9: opening without a plan COACHES it rather than telling the author to
+-- go and run another command. The fixture's fight passes its gates here (the
+-- suite forces Validate to ok), so the search starts and the window says so.
+check("opening without a plan starts coaching it",
+    MD.replayCoaching == rec.id or SP.plans[rec.id] ~= nil,
+    W.frame.hint:GetText())
+check("the hint says what it is doing",
+    W.frame.hint:GetText():find("coach") ~= nil, W.frame.hint:GetText())
 check("narrower window", W.frame:GetWidth() < 500, tostring(W.frame:GetWidth()))
+
+-- ...but a fight that does not replay is still not coached silently: it names
+-- the gate that failed and how to override it.
+do
+    MD.replayCoaching, MD.coachSearch = nil, nil
+    SP.plans[rec.id] = nil
+    local realV = SM.Validate
+    function SM:Validate(...)
+        local v = realV(self, ...)
+        v.ok = false
+        v.gates = v.gates or {}
+        v.gates[1] = { name = "mana mean", ok = false }
+        return v
+    end
+    MD:OpenReplay(1)
+    local hint = MD.Replay._state().frame.hint:GetText()
+    check("a fight that does not replay is not coached silently",
+        MD.replayCoaching == nil and SP.plans[rec.id] == nil, hint)
+    check("...and the hint names the gate and the way past it",
+        hint:find("does not replay") ~= nil and hint:find("force") ~= nil, hint)
+    SM.Validate = realV
+end
 
 -- in combat: refuses
 _G.UnitAffectingCombat = function() return true end

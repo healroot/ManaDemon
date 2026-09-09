@@ -567,3 +567,43 @@ coached silently, and forced it coaches every pull that is not under the gate.
 Coaching does not open the replay, and still does not -- the card names the pulls worth
 looking at ("pull 34 saves 2.0k") and `/md replay 1:34` now actually shows something when
 you follow it.
+
+
+## 18. One command (v0.13.9)
+
+> "I would like to make it simplier, it a cumbersome to run validate then coach then play"
+
+It was. Three commands answered one question, and two of them existed only because the third
+had nothing to draw:
+
+```
+before   /md simreplay 12      does it replay?
+         /md coach 12          search, store a plan
+         /md replay 12         watch it
+after    /md replay 12
+```
+
+**Opening a replay coaches it.** `MD:CoachOnOpen` runs when the window opens on a fight with
+no plan: validation happens inside the search, the window opens immediately with the left
+column ready, the hint says *"coaching this fight - the suggested column fills in when the
+search finishes"*, and the right column appears when it does. The search is frame-sliced and
+cached per recording, so it happens once per fight and never in combat.
+
+**A fight that does not replay is still not coached silently.** That rule is v0.9.6's and it
+survives, because handing out advice the engine got wrong is worse than handing out none.
+What changed is that the refusal now says everything needed to act on it in one line:
+
+```
+does not replay (mana mean) - /md replay 12 force coaches it anyway
+```
+
+`db.replayAutoCoach` turns it off.
+
+**And an explicit coach beats the automatic one.** Opening the window starts a background
+search, and pressing Coach in the Review tab used to be answered with "already searching" --
+the automatic search blocking the author's own. Theirs wins: ours is cancelled.
+`reviewui` (43 -> 44) holds it.
+
+For a whole run the shape is unchanged: `/md coachrun N [force]` searches one plan for the
+dungeon, because a run's plan is a different question from a pull's, and (v0.13.8) it now
+hands that plan to every pull so the replay draws it.

@@ -1309,6 +1309,42 @@ end
 -- Redraw the suggested column from whatever plan is now cached for this
 -- recording, keeping the clock where it is. Switching strategy is a redraw, not
 -- a search: the window never searches (SPEC-v0.8 2.5).
+-- v0.13.9: coach on open. A replay with no suggested column is the question
+-- half answered, and making the author run three commands to get the other half
+-- was friction with nothing behind it. The search is frame-sliced and its result
+-- is cached per recording, so this happens once per fight and never in combat.
+--
+-- A fight that does not replay is still NOT coached silently: the window says
+-- which gate failed and names the force spelling. That rule (v0.9.6) is about
+-- not handing out advice the engine got wrong, and it survives.
+function MD:CoachOnOpen(rec, force, validation)
+    local SP = MD.SimPlanner
+    if not (rec and SP and MD.player.isDruid) then return end
+    if MD.db and MD.db.replayAutoCoach == false then return end
+    if SP.plans[rec.id] or MD.coachSearch or MD.replayCoaching then return end
+    if not force and not (validation and validation.ok) then return end
+    MD.replayCoaching = rec.id
+    MD:Print("replay: no plan for this fight yet - coaching it now.")
+    MD.coachSearch = SP.CoachAsync(rec, { n = openSpec, force = force, quiet = true },
+        function(lines)
+            MD.coachSearch = nil
+            MD.replayCoaching = nil
+            -- one line, not the whole card: the window is the answer here, and
+            -- /md coach N still prints the card in full when it is wanted
+            local p = SP.plans[rec.id]
+            if p then
+                MD:Print(string.format("replay: coached - %s. The suggested column is drawn.",
+                    p.name or "plan"))
+            elseif lines and lines[1] then
+                MD:Print(lines[1])
+            end
+            -- only redraw if the window is still on the fight we coached
+            if frame and frame:IsShown() and rp and rp.rec and rp.rec.id == rec.id then
+                MD:RebuildSuggested()
+            end
+        end)
+end
+
 function MD:RebuildSuggested()
     if not (rp and openSpec) then return end
     local at = left.state and left.state.t or 0
@@ -1347,6 +1383,8 @@ function MD:OpenReplay(n)
     local t0 = debugprofilestop and debugprofilestop() or 0
     openSpec, openForce = n, force
     rp = SP.Replay(rec, { dt = 0.25, force = force })
+    -- v0.13.9: no plan yet? coach it now, and let the window fill in.
+    if not rp.right then MD:CoachOnOpen(rec, force, rp.validation) end
     if not rp then MD:Print("replay: could not build the fight.") return end
     if force and not rp.right then
         MD:Print(string.format("replay: nothing to force - no plan has been coached for this fight. " ..
@@ -1424,9 +1462,19 @@ function MD:OpenReplay(n)
         right.title:SetText(string.format("SUGGESTED  |cff888888(%s, %d binds)|r%s", p.name or "plan", p:BindCount(),
             rp.forced and "  |cffff9966FORCED - this fight does not replay|r" or ""))
         frame.hint:SetText("")
+    elseif MD.replayCoaching == (rp.rec and rp.rec.id) then
+        frame.hint:SetText("coaching this fight - the suggested column fills in when the search finishes")
     else
-        frame.hint:SetText(v and not v.ok and "no plan: this fight does not replay"
-            or "no plan: press Coach first")
+        -- v0.13.9: opening a replay coaches it. The old flow was validate, then
+        -- coach, then play -- three commands to answer one question, and two of
+        -- them only existed because the third had nothing to draw.
+        frame.hint:SetText(v and not v.ok
+            and string.format("does not replay (%s) - |cffffff00/md replay %s force|r coaches it anyway",
+                (function()
+                    for _, g in ipairs(v.gates or {}) do if not g.ok then return g.name end end
+                    return "a gate failed"
+                end)(), tostring(openSpec or ""))
+            or "no plan yet")
     end
 
     scrubber.settingValue = true
