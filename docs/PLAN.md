@@ -279,7 +279,10 @@ read only what a human can see.
   field the solver does not have, so picking a solver in the replay's chooser took the
   window down. *(2026-09-09; the regression test needed three attempts -- the first eight
   assertions passed vacuously on a wrong call signature.)*
-- [ ] **v0.14.0** the continuous run replay: the run's clock, not the pull's, with a gap
+- [x] **v0.14.0a** `Engine/RunTimeline.lua`: the run's clock as a pure model, with
+  `tools/timeline.lua` (27 assertions). *(2026-09-09; the real Underbog run builds into 72
+  segments, 36 pulls and 36 gaps, 51% of it gap.)*
+- [ ] **v0.14.0b** the continuous run replay: the run's clock, not the pull's, with a gap
   state driven from `run.hp` / `run.mana` and the run strip as its scrubber
   (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health. **Seamless
   is the requirement**: no reopening between pulls, and changing the strategy must redraw the

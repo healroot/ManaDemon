@@ -14,7 +14,7 @@ S.Load({
     "Engine/Targets.lua", "Engine/Overheal.lua", "Engine/ManaCooldowns.lua", "Engine/TTO.lua",
     "Engine/RankMath.lua", "Engine/Calibration.lua", "Engine/PullBudget.lua",
     "Engine/SimModel.lua", "Engine/FightRecorder.lua", "Engine/RunRecorder.lua", "Engine/Intuition.lua", "Engine/Foresight.lua", "Engine/SimSolver.lua",
-    "Engine/SimPlanner.lua", "Engine/ReplayTrace.lua",
+    "Engine/SimPlanner.lua", "Engine/RunTimeline.lua", "Engine/ReplayTrace.lua",
     "Data/SimFixture_BF1.lua", "Data/SimPresets.lua", "Data/AuraList.lua", "Data/Intuition_TBC.lua", "Data/DruidSpells.lua",
     -- UI/Summary.lua owns the combat-log handler and the fight lifecycle; it
     -- touches no widgets, so it loads here too.
