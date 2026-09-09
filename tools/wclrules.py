@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/wclrules.py <raw.json> --healer <name>
+"""tools/wclrules.py <raw.json> --healer <name> [--observed <out.lua>]
 
 What the healer actually did, and the state of the fight when they did it.
 Every number here comes straight out of the log -- no spell model is involved,
@@ -13,6 +13,27 @@ import json, sys, statistics
 from collections import defaultdict, Counter
 
 HOT_DUR = {"Lifebloom": 7.0, "Rejuvenation": 12.0, "Regrowth": 21.0}
+
+
+def observed_table(b, hid, abil, out):
+    """The median gross, non-crit amount each spell actually healed, as a Lua
+    table for tools/wclcheckkit.lua to hold our model against."""
+    g = defaultdict(list)
+    for e in b["healing"]:
+        if e.get("sourceID") != hid or e.get("hitType") == 2:
+            continue
+        gross = (e.get("amount") or 0) + (e.get("overheal") or 0)
+        if gross > 0:
+            g[(e.get("abilityGameID"), "tick" if e.get("tick") else "direct")].append(gross)
+    rows = []
+    for (sid, what), v in sorted(g.items(), key=lambda x: -len(x[1])):
+        if len(v) < 3:
+            continue
+        nm = abil.get(sid, str(sid))
+        rows.append('{id=%d,what="%s",label="%s %s",median=%.1f,stacks=%d}'
+                    % (sid, what, nm, what, statistics.median(v),
+                       3 if (nm == "Lifebloom" and what == "tick") else 1))
+    return "{" + ",".join(rows) + "}"
 
 
 def main():
@@ -98,6 +119,13 @@ def main():
               % (r["t"], r["spell"][:15], r["target"][:14],
                  "-" if r["hp"] is None else "%d" % r["hp"], r["in5s"],
                  r["rolling"][:14], r["othersHurt"], r["mana"]))
+
+    if "--observed" in sys.argv:
+        dest = sys.argv[sys.argv.index("--observed") + 1]
+        key = "%s-%s" % (healer, byid[hid].get("server") or "WCL")
+        with open(dest, "w") as f:
+            f.write("return {[%r]=%s}\n" % (key, observed_table(b, hid, abil, dest)))
+        print("wrote %s" % dest)
 
     print("\n== the rule each spell looks like")
     per = defaultdict(list)

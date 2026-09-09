@@ -8,7 +8,8 @@ local opts = {}
 do
     local i = 1
     while i <= #arg do
-        if arg[i] == "--file" then opts.file = arg[i + 1]; i = i + 1
+        if arg[i] == "--calibrate" then opts.calibrate = arg[i + 1]; i = i + 1
+        elseif arg[i] == "--file" then opts.file = arg[i + 1]; i = i + 1
         elseif arg[i] == "--char" then opts.char = arg[i + 1]; i = i + 1 end
         i = i + 1
     end
@@ -58,6 +59,42 @@ local function ApplyProfile(p)
 end
 
 local allRecs = {}
+-- --calibrate: scale the kit by what the LOG says each spell actually healed,
+-- measured by tools/wclrules.py --observed. This exists because our level 70
+-- heal values are known to be 1.4-1.8x low and the error is UNEVEN across
+-- spells, so it biases a comparison between strategies that differ in spell
+-- mix. It corrects the experiment, never the shipped model: nothing here is
+-- written back, and Engine/Calibration.lua still never feeds RankMath.
+local OBS = opts.calibrate and dofile(opts.calibrate) or nil
+local function Calibrate(kit, who)
+    local rows = OBS and OBS[who]
+    if not rows then return kit, nil end
+    local n, worst = 0, 1
+    for _, form in pairs(kit) do
+        if type(form) == "table" then
+            for _, row in ipairs(rows) do
+                local e = form[row.id]
+                if e then
+                    local model
+                    if row.what == "tick" then model = (e.tick or 0) * (row.stacks or 1)
+                    else model = (e.direct or 0) + (e.bloom or 0) end
+                    if model and model > 0 then
+                        local k = row.median / model
+                        if row.what == "tick" then e.tick = (e.tick or 0) * k
+                        else
+                            e.direct = (e.direct or 0) * k
+                            e.bloom = (e.bloom or 0) * k
+                        end
+                        n = n + 1
+                        if k > worst then worst = k end
+                    end
+                end
+            end
+        end
+    end
+    return kit, (n > 0 and worst or nil)
+end
+
 local pool = {}
 for key, c in pairs(realDB.char or {}) do
     for _, rec in ipairs(c.recordings or {}) do
@@ -71,7 +108,8 @@ if opts.char then
     for _, e in ipairs(pool) do if e.who == opts.char then keep[#keep + 1] = e end end
     pool = keep
 end
-print(string.format("%d recording(s)\n", #pool))
+print(string.format("%d recording(s)%s\n", #pool,
+    OBS and "   [kit scaled to what the log says each spell healed]" or ""))
 
 print(string.format("%-26s %-46s %s", "strategy", "total over every recording", "causal?"))
 local rows = {}
@@ -81,6 +119,8 @@ for _, entry in ipairs(SP.STRATEGY_SET) do
     for _, e in ipairs(pool) do
         ApplyProfile(e.profile)
         local kit = MD.RankMath:SpellKit({ live = true })
+        local worst
+        kit, worst = Calibrate(kit, e.who)
         local sc = SM.ScenarioFromRecording(e.rec, kit)
         if sc then
             local plan = SP.MakeStrategy(entry, SP.MaxRankBinds(), kit,

@@ -227,7 +227,7 @@ read only what a human can see.
 - [x] **v0.13.0** `Engine/SimSolver.lua`: deposits, the causal forecast, the gap integral,
   the value comparison, waiting as a priced candidate, and the danger-line override.
   `tools/solvercheck.lua` (17 assertions) and `tools/solvercmp.lua` (the control
-  experiment). *(2026-09-08; 43% less mana than the threshold rules for identical deaths
+  experiment). *(2026-09-08; 33% less mana than the threshold rules for identical deaths
   and floor seconds, on the author's five recordings.)*
 - [x] **v0.13.1** healer intuition: a prior on incoming damage per zone and role, learned
   from OTHER recordings and never from the fight being planned (leave-one-out enforced in
@@ -247,6 +247,11 @@ read only what a human can see.
   *(2026-09-09; the corpus prior is inert on the author's solo recordings -- correctly, a
   raid corpus has learned that healers take nothing at the pull -- and the blind solver is
   still the default.)*
+- [x] **v0.13.4** the wait rule judged casting now and waiting over DIFFERENT windows, so
+  the solver deferred almost indefinitely under sustained damage. Found by ranking the
+  strategies on a held-out Warcraft Logs fight: the human cast 82 times, the solver 26.
+  *(2026-09-09; casts 26 -> 52 on that fight, deaths 2 -> 1; the author's-recordings
+  headline drops from 43% to 33% because part of the old saving was under-casting.)*
 - [ ] **v0.13.5** the solver's reasons in the replay and on the card -- it knows the
   number it decided on, so the sentence can name it.
 - [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives

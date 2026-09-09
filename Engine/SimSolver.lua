@@ -220,9 +220,19 @@ function Solver:Params()
              priorFades = self.priorFades }
 end
 
--- Every (spell, target) the healer can afford, scored. `atT` lets the caller ask
--- the same question one global cooldown later, which is how waiting is priced.
-function Solver:Best(S, t, mana, form, atT)
+-- Every (spell, target) the healer can afford, scored.
+--
+-- `delay` is how long from now the cast would actually start -- 0 for casting
+-- now, one global cooldown for the "should I wait" question. THE PROJECTION
+-- WINDOW DOES NOT MOVE WITH IT. Both options are judged over the same
+-- [t, t + horizon], so waiting is charged for the gap it suffers while waiting.
+--
+-- v0.13.4: it used to move the window with the delay, which compared the next
+-- 18 seconds against a different 18 seconds. Under continuous damage the later
+-- window always looked better -- the same spell fills more gap when the target
+-- has fallen further -- so the solver deferred almost indefinitely. On a raid
+-- fight where the healer cast 82 times it cast 26 and let two people die.
+function Solver:Best(S, t, mana, form, delay)
     local kit = self.kit[form] or self.kit.caster
     local HOT_INDEX = SM.HOT_INDEX
     local bestV, bestID, bestTgt, bestSaved, bestCost, bestRate, bestDef = -1
@@ -236,10 +246,8 @@ function Solver:Best(S, t, mana, form, atT)
             -- nothing missing and nothing coming: no cast can buy anything
             if deficit > 0 or rate > 0 then
                 local inbound = S.incoming and S.incoming[i] or nil
-                local hpAt = hp - rate * (atT - t)
-                if hpAt < 0 then hpAt = 0 end
-                local flight, fn = SV.InFlight(S, i, atT, flightBuf)
-                local base = Gap(hpAt, maxHP, rate, inbound, flight, fn, nil, 0, atT, horizon)
+                local flight, fn = SV.InFlight(S, i, t, flightBuf)
+                local base = Gap(hp, maxHP, rate, inbound, flight, fn, nil, 0, t, horizon)
                 for _, fam in ipairs(SV.FAMILIES) do
                     local id = self.binds[fam]
                     local e = id and kit[id]
@@ -261,12 +269,15 @@ function Solver:Best(S, t, mana, form, atT)
                         end
                         if not (e.type == "instant" and not e.swiftmendAmount) then
                             local dep, dn = SV.Deposits(e, st, depBuf)
+                            if (delay or 0) > 0 then
+                                for j = 1, dn do dep[j][1] = dep[j][1] + delay end
+                            end
                             local f2, fn2 = flight, fn
                             if eaten then
-                                f2, fn2 = SV.InFlight(S, i, atT, {}, eaten)
+                                f2, fn2 = SV.InFlight(S, i, t, {}, eaten)
                             end
-                            local withGap = Gap(hpAt, maxHP, rate, inbound, f2, fn2,
-                                                dep, dn, atT, horizon)
+                            local withGap = Gap(hp, maxHP, rate, inbound, f2, fn2,
+                                                dep, dn, t, horizon)
                             local saved = base - withGap
                             local cost = e.cost or 1
                             local v = saved / (cost > 0 and cost or 1)
@@ -373,7 +384,7 @@ function Solver:Decide(S, t, mana, form)
         end
     end
 
-    local v, id, tgt, saved, cost, rate, deficit = self:Best(S, t, mana, form, t)
+    local v, id, tgt, saved, cost, rate, deficit = self:Best(S, t, mana, form, 0)
     if not id or v < self.minValue then
         self.reason = { rule = 9, target = tgt, deficit = deficit, rate = rate,
                         value = v > 0 and v or nil, floor = self.minValue,
@@ -385,7 +396,7 @@ function Solver:Decide(S, t, mana, form)
     -- worth more, hold -- this is v0.11.13's "can they hold out until the
     -- efficient spell is free" as a consequence rather than a branch.
     local gcd = 1.5
-    local lv = self:Best(S, t, mana, form, t + gcd)
+    local lv = self:Best(S, t, mana, form, gcd)
     if lv > v * 1.05 then
         self.reason = { rule = 9, target = tgt, deficit = deficit, rate = rate,
                         value = v, later = lv, floor = self.minValue }

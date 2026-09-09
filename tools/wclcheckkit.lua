@@ -6,7 +6,8 @@
 -- the raw report. A row that is off by more than the crit spread is a number in
 -- Data/SpellData.lua to go and fix, not noise.
 local here = arg[0]:match("^(.*)/[^/]+$")
-local file = ".logs/wcl-records.lua"
+-- tools/run.sh passes the checkout root as arg[1]; ours start at 2
+local file = arg[2] or ".logs/wcl-records.lua"
 dofile(file)
 local realDB = _G.ManaDemonDB
 local pre = {}
@@ -16,7 +17,7 @@ local MD = dofile(here .. "/harness.lua"); arg[0] = a0
 local S = _G.STUB
 
 -- observed medians, gross, non-crit: written next to the records by the converter
-local OBS = dofile(".logs/wcl-observed.lua")
+local OBS = dofile(arg[3] or ".logs/wcl-observed.lua")
 
 for key, p in pairs(pre) do
     S.level = p.level; S.manaMax = p.manaMax; S.mana = p.manaMax

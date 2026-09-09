@@ -2653,3 +2653,41 @@ other tools get away with reading from `arg[1]` only because their parsers happe
 a path, and a new tool that did not immediately tried to `dofile` a directory.
 
 11 suites green (solvercheck 47 -> 58).
+
+## 2026-09-09 — v0.13.4: ranking on a held-out fight found the wait rule was broken
+
+The author asked to rank the models on a new Warcraft Logs fight. Prince Malchezaar,
+`waFx9B1kNQJWP3hq` #103, Samwellx, 10-man, 129s, 6% foreign healing — an encounter none of
+the 22 corpus fights come from, so out of sample for the shipped prior as well.
+
+Two obstacles before a table could mean anything. The **kit is wrong at level 70 and
+unevenly so** (Lifebloom 1.55x low, Regrowth tick 1.66x, Rejuvenation 1.78x, Regrowth direct
+1.39x on this fight's own log), and strategies differ in spell mix, so the error biases the
+ranking and not just the scores. `tools/strategies.lua --calibrate` now scales the kit by
+what the log says each spell actually healed — correcting **the experiment, never the
+shipped model**. And the **fight does not replay**: health curves fail and the simulation
+kills people who lived, so any table from it is suggestive at best.
+
+**What the attempt actually found is a real bug.** The human cast 82 times and nobody died;
+every solver variant cast 26. Dropping `minValue` to zero changed nothing, which ruled out
+the efficiency floor and pointed at the wait rule:
+
+`Best(S, t, mana, form, atT)` moved the whole projection window to `atT`. "Cast now" was
+scored over `[t, t+18]` and "wait" over `[t+1.5, t+19.5]` — **the gap suffered while waiting
+was never counted**. Under sustained damage the later window always wins, because the same
+spell fills more gap once the target has fallen further, so the solver deferred almost
+indefinitely. On the author's light dungeon pulls it hardly showed; on a raid it starves.
+
+`delay` now shifts only the candidate's deposits, and both options are integrated over the
+same window. Casts on the held-out fight 26 -> 52, deaths 2 -> 1. **On the author's own
+recordings the saving against the rules drops from 43% to 33%**, because part of the old
+margin was the solver simply not casting. That number is corrected everywhere it was quoted.
+
+The ranking, with the caveat standing: on a hard raid fight the threshold rules edge the
+solver — everyone loses one person and the rules keep people further off the floor — which
+is the reverse of the author's dungeon pulls. Blurred foresight comes last and loses an
+extra person. Neither prior helps.
+
+A clean verdict still needs the level 70 heal values fixed so the fight replays at all.
+
+11 suites green.

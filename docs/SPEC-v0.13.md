@@ -110,7 +110,7 @@ declares.
 
 ```
 rules (5 thresholds)                 deaths 0   floor 0.0s   mana 21900
-solver, minValue 15, horizon 18      deaths 0   floor 0.0s   mana 12372     -43%
+solver, minValue 15, horizon 18      deaths 0   floor 0.0s   mana 14711     -33%
 ```
 
 Two things the sweep said that the design did not predict. **`horizon` is the parameter
@@ -325,3 +325,61 @@ tank, the blind solver waits at the pull and the corpus-primed one opens on the 
 
 All four ship selectable. The blind solver is still the default, because on the only corpus
 where our spell values are trustworthy it is still the one that wins.
+
+
+## 12. Ranking the strategies on a held-out fight (v0.13.4)
+
+A strategy table built from the fights a strategy was tuned on is worth little, so: Prince
+Malchezaar, `waFx9B1kNQJWP3hq` #103, Samwellx, 10-man, 129s, **6% foreign healing** — an
+encounter none of the 22 corpus fights come from, so it is out of sample for the shipped
+prior too.
+
+Two things had to be dealt with before the table meant anything.
+
+**The kit is wrong at level 70, unevenly.** Measured against this fight's own log:
+Lifebloom tick 1.55x low, Regrowth tick 1.66x, Rejuvenation tick 1.78x, Regrowth direct
+1.39x. Strategies differ in spell mix, so an uneven error biases the *ranking*, not just the
+scores. `tools/strategies.lua --calibrate` scales the kit by what the log says each spell
+actually healed. **This corrects the experiment and never the shipped model** — nothing is
+written back, and `Engine/Calibration.lua` still never feeds `RankMath`.
+
+**The fight does not replay.** Health curves fail their gate and the simulation kills people
+who lived. So the table below is suggestive, not a verdict.
+
+### 12.1 What it found instead: the wait rule was broken
+
+The human cast **82 times and nobody died**. Every solver variant cast **26**. Sweeping
+`minValue` down to zero changed nothing, which ruled out the efficiency floor and pointed at
+the wait rule:
+
+`Best(S, t, mana, form, atT)` moved the whole projection window to `atT`, so "cast now" was
+scored over `[t, t+18]` and "wait" over `[t+1.5, t+19.5]`. **The gap suffered while waiting
+was never counted.** Under continuous damage the later window always looks better — the same
+spell fills more gap once the target has fallen further — so the solver deferred almost
+indefinitely.
+
+Now `delay` shifts only the candidate's deposits and both options are integrated over the
+same `[t, t+horizon]`. Casts on the held-out fight went 26 -> 52 and deaths 2 -> 1; on the
+author's own recordings the saving against the rules drops from 43% to **33%**, because part
+of the old margin was simply not casting.
+
+### 12.2 The table, with that caveat standing
+
+```
+Rules: HoTs only                   deaths 1  floor 2.2s  mana 11053  44 casts  causal
+Rules: balanced                    deaths 1  floor 3.2s  mana 15835  52 casts  causal
+Solver: reactive                   deaths 1  floor 3.4s  mana 15076  56 casts  causal
+Solver: frugal                     deaths 1  floor 5.7s  mana 12703  51 casts  causal
+Solver: no intuition               deaths 1  floor 5.7s  mana 12923  52 casts  causal
+Solver: intuition from old logs    deaths 1  floor 5.7s  mana 12923  52 casts  causal
+Solver: intuition from many raids  deaths 1  floor 7.7s  mana 14023  57 casts  causal
+Solver: blurred foresight          deaths 2  floor 5.6s  mana 15377  53 casts  NOT causal
+```
+
+On a hard raid fight the **threshold rules edge the solver**, which is the reverse of the
+author's dungeon pulls: everyone loses one person, and the rules spend their mana keeping
+people further off the floor. Blurred foresight is last and loses somebody extra. Neither
+prior helps, again.
+
+The clean verdict needs the level 70 heal values fixed so the fight replays at all. Until
+then this is one data point that says the solver's advantage is not universal.
