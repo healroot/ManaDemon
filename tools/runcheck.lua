@@ -384,6 +384,7 @@ local h = SP.CoachRun(chainRun, { maxEvals = 30 }, function(lines, p, c) card, b
 local frames = 0
 while not card and frames < 20000 do S.Tick(0.016); frames = frames + 1 end
 check("the run search finishes", card ~= nil, string.format("%d frames", frames))
+
 check("the card names the run and both rows", (function()
     local head, hasYou, hasBest = false, false, false
     for _, l in ipairs(card or {}) do
@@ -402,6 +403,47 @@ check("the card states its caveats", (function()
     return false
 end)())
 check("the plan is cached for the run", SP.runPlans[chainRun.id] == bestPlan and bestPlan ~= nil)
+
+-- v0.13.8: coaching a run has to leave the REPLAY something to draw. It wrote
+-- only SP.runPlans, so a coached run showed an empty suggested column on every
+-- pull while its own card said "Play one to see it".
+do
+    -- every pull of the scripted run fails its gates on purpose (a death, 69%
+    -- foreign healing), so an unforced coach must coach none of them -- the same
+    -- rule a single fight follows: advice from a fight the engine gets wrong is
+    -- worse than none.
+    local coached = 0
+    for _, rec in ipairs(chainRun.pulls or {}) do
+        if SP.plans[rec.id] then coached = coached + 1 end
+    end
+    check("a run of pulls that do not replay is not coached silently", coached == 0,
+        string.format("%d pull(s) got a plan", coached))
+
+    -- ...and forced, it coaches every pull that is not under the recording gate
+    local card2
+    SP.CoachRun(chainRun, { maxEvals = 30, force = true }, function(l, p2) card2 = l end)
+    local f2 = 0
+    while not card2 and f2 < 20000 do S.Tick(0.016); f2 = f2 + 1 end
+    local withPlan, eligible, shortCoached = 0, 0, 0
+    for _, rec in ipairs(chainRun.pulls or {}) do
+        if rec.short then
+            if SP.plans[rec.id] then shortCoached = shortCoached + 1 end
+        else
+            eligible = eligible + 1
+            if SP.plans[rec.id] then withPlan = withPlan + 1 end
+        end
+    end
+    check("forced, coaching a run leaves every coachable pull with a plan",
+        eligible > 0 and withPlan == eligible,
+        string.format("%d of %d pull(s)", withPlan, eligible))
+    check("a pull under the recording gate is left alone even then",
+        shortCoached == 0, tostring(shortCoached))
+    check("the plan a pull got is the run's own plan", (function()
+        for _, rec in ipairs(chainRun.pulls or {}) do
+            if SP.plans[rec.id] then return SP.plans[rec.id] ~= nil end
+        end
+    end)())
+end
 local gates = SP.RunGates(chainRun, kit)
 check("every pull is put through the gates once", gates.of == 3 and gates.failed >= 0,
     string.format("%d of %d fail", gates.failed, gates.of))

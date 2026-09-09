@@ -2774,3 +2774,31 @@ The Underbog 08:46: 34 pull(s) validated, 6 failed
 ```
 
 11 suites green.
+
+## 2026-09-09 — v0.13.8: a coached run had nothing to show
+
+The author: "you say there is a coach run, but in my case it does nothing ... when i open
+replay after i dont see coach column in most of the combats."
+
+`SP.CoachRun` worked. Driven against the real Underbog run it finished in 24 frames and
+produced a proper card -- you drank 6x and spent 86.7k, the best plan drinks none and spends
+69.3k, the drink policy differs (under 40% up to 95% against the author's under 68% up to
+100%), and pull 34 alone is worth 2.0k.
+
+What it did not do was write `SP.plans[rec.id]`. It stored the plan in `SP.runPlans[run.id]`
+and nowhere else, and that is not what the replay window reads. So every one of the 36 pulls
+had an empty suggested column -- while the card printed "Play one to see it: /md replay
+<run>:<pull>".
+
+One plan for the whole dungeon is the point of coaching a run, so every pull in it now gets
+that plan: 0 of 36 before, 28 of 36 after. The eight without are 2 under the recording gate
+and 6 that do not replay -- the same rule a single fight has followed since v0.9.6 -- and
+`/md coachrun 1 force` takes it to 34.
+
+`runcheck` 74 -> 78 holds both branches: a run whose pulls all fail their gates is not
+coached silently, and forced it coaches everything that is not under the gate.
+
+Coaching still does not open the replay. The card names the pulls worth looking at, and now
+following it shows something.
+
+11 suites green.

@@ -268,6 +268,9 @@ read only what a human can see.
   draw; the replay's strategy chooser lists the planners (`SP.STRATEGY_SET`) and not only
   the last search's objectives; `tools/import.lua gates --run K` validates a whole run at
   once. *(2026-09-09.)*
+- [x] **v0.13.8** `CoachRun` gives its plan to every pull, so a coached run actually draws
+  a suggested column; `/md coachrun N force` for the pulls that do not replay.
+  *(2026-09-09; it was writing only `SP.runPlans`, so the answer was 0 of 36.)*
 - [ ] **v0.14.0** the continuous run replay: the run's clock, not the pull's, with a gap
   state driven from `run.hp` / `run.mana` and the run strip as its scrubber
   (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health.

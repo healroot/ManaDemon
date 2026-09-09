@@ -1282,6 +1282,10 @@ function MD:RunCoachRun(arg)
         else MD:Print("coachrun: nothing running.") end
         return
     end
+    -- "/md coachrun 2 force": coach every pull, the ones that do not replay
+    -- included. Same escape hatch a single fight has had since v0.9.6.
+    local force = arg:find("force") ~= nil
+    arg = arg:gsub("force", "")
     local n = tonumber(arg) or 1
     local run = MD.RunRecorder:Get(n)
     if not run then
@@ -1292,7 +1296,8 @@ function MD:RunCoachRun(arg)
     if not MD.player.isDruid then MD:Print("coachrun: coaching is Druid-only in v1.") return end
     MD:Print(string.format("coachrun: %s - %d pull(s) through the engine, this may take a moment.",
         run.name or "?", #(run.pulls or {})))
-    MD.runSearch = MD.SimPlanner.CoachRun(run, {}, function(lines)
+    if force then MD:Print("coachrun: FORCED - pulls that do not replay are coached too.") end
+    MD.runSearch = MD.SimPlanner.CoachRun(run, { force = force }, function(lines)
         MD.runSearch = nil
         if MD.ShowCopyPopup and #lines > 6 then
             MD:ShowCopyPopup("ManaDemon coach: " .. (run.name or "run"), table.concat(lines, "\n"))

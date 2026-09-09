@@ -2103,6 +2103,26 @@ function SP.CoachRun(run, opts, onDone)
                 return
             end
             SP.runPlans[run.id] = best
+            -- v0.13.8: hand the run's plan to every pull in it. The replay
+            -- window draws its suggested column from SP.plans[rec.id] and
+            -- coachrun wrote only SP.runPlans, so a coached run left all 36
+            -- pulls with an empty right column -- while the card told the
+            -- author to "Play one to see it". One plan for the whole dungeon is
+            -- the point of coaching a run, so every pull gets that plan.
+            --
+            -- A pull that does not replay is coached only under `force`, the
+            -- same rule a single fight follows (v0.9.6): advice from a fight the
+            -- engine gets wrong is worse than none.
+            local kit2 = kit
+            for _, rec in ipairs(run.pulls or {}) do
+                if not rec.short then
+                    local v = SM:Validate(rec, kit2)
+                    if (v and v.ok) or SP.forced[rec.id] or opts.force then
+                        if opts.force then SP.forced[rec.id] = true end
+                        SP.plans[rec.id] = best.plan or best
+                    end
+                end
+            end
             if onDone then onDone(SP.RunCard(run, best, chain, you, evals, gates), best, chain, you) end
         end)
 end
