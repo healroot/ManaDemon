@@ -282,7 +282,11 @@ read only what a human can see.
 - [x] **v0.14.0a** `Engine/RunTimeline.lua`: the run's clock as a pure model, with
   `tools/timeline.lua` (27 assertions). *(2026-09-09; the real Underbog run builds into 72
   segments, 36 pulls and 36 gaps, 51% of it gap.)*
-- [ ] **v0.14.0b** the continuous run replay: the run's clock, not the pull's, with a gap
+- [x] **v0.14.1** run mode in the window: `/md replay run N` plays the dungeon end to end,
+  gaps included, on the run's clock. *(2026-09-09; replayui 87 -> 98.)*
+- [ ] **v0.14.2** one set of frames for the whole run (no rebuild at a pull boundary), the
+  run strip as the scrubber's cursor, and changing strategy redrawing in place. The
+  remaining half of: the run's clock, not the pull's, with a gap
   state driven from `run.hp` / `run.mana` and the run strip as its scrubber
   (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health. **Seamless
   is the requirement**: no reopening between pulls, and changing the strategy must redraw the

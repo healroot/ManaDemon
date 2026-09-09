@@ -473,5 +473,90 @@ do
     MD.Replay._seek(0)
 end
 
+--------------------------------------------------------------------------------
+-- v0.14.0: the whole run on one clock. The point is that playing does not stop
+-- at a pull boundary and the gaps are played too -- 51% of the author's real
+-- run is gap, and that is where the drinking happens.
+--------------------------------------------------------------------------------
+do
+    local RR = MD.RunRecorder
+    -- a run holding the fixture's pull, with a gap after it and health sampled
+    -- across the whole thing
+    local rec2 = MD.FightRecorder:Get(1)
+    local run = {
+        id = 4242, name = "Played Run", zone = "Somewhere", dur = 120, pool = 7009,
+        pulls = { rec2 },
+        mana = { t = {}, v = {} },
+        hp = { t = {}, who = {}, frac = {} },
+        ev = { t = { 70 }, kind = { RR.K.DRINK }, a = { 2000 }, b = { 0.3 } },
+    }
+    rec2.runT0 = 10
+    local names = {}
+    for _, r in ipairs(rec2.roster or {}) do names[#names + 1] = r.name end
+    for i2 = 0, 60 do
+        local t = i2 * 2
+        run.mana.t[#run.mana.t + 1] = t
+        run.mana.v[#run.mana.v + 1] = 2000 + i2 * 80
+        run.hp.t[#run.hp.t + 1] = t
+        run.hp.who[#run.hp.who + 1] = names
+        local fr = {}
+        for _ = 1, #names do fr[#fr + 1] = math.min(1, 0.35 + i2 * 0.015) end
+        run.hp.frac[#run.hp.frac + 1] = fr
+    end
+    MD.cdb.runs = { run }
+
+    MD:OpenRunPlay(1)
+    local r = MD.Replay._run()
+    check("run mode opens on the run's clock", r ~= nil and r.dur > 100,
+        r and string.format("%.0fs", r.dur) or "not in run mode")
+    check("it starts in the gap before the first pull", r and r.seg == "gap", r and r.seg)
+    check("the run has gap health to show", r and r.hasGapHealth == true)
+
+    -- play it: the clock must cross the pull and come out the other side without
+    -- ever stopping
+    local sawPull, sawGapAfter, frames = false, false, 0
+    MD.Replay._setPlaying(true)
+    while frames < 4000 do
+        S.Tick(0.1); frames = frames + 1
+        local st = MD.Replay._run()
+        if not st then break end
+        if st.seg == "pull" then sawPull = true end
+        if sawPull and st.seg == "gap" then sawGapAfter = true end
+        if st.t >= st.dur - 0.05 then break end
+    end
+    check("playing crosses into the pull", sawPull)
+    check("...and keeps going into the gap after it, without stopping",
+        sawGapAfter, string.format("%d frames", frames))
+    local st = MD.Replay._run()
+    check("it reaches the end of the RUN, not the end of a pull",
+        st and st.t >= st.dur - 0.5, st and string.format("%.0f of %.0f", st.t, st.dur))
+
+    -- the bars move in the gap, which is the whole point
+    MD.Replay._runSeek(nil, 4)
+    local W4 = MD.Replay._state()
+    local anyRow = W4.rows[1]
+    local early = W4.left.frames[anyRow].bar:GetValue()
+    MD.Replay._runSeek(nil, 100)
+    local late = W4.left.frames[anyRow].bar:GetValue()
+    check("health bars move between combats", late > early,
+        string.format("%.2f at 4s -> %.2f at 100s", early, late))
+
+    -- and the strip says what is going on out there
+    MD.Replay._runSeek(nil, 72)
+    check("a drink in the gap is named", W4.left.strip.castFS:GetText():find("drink") ~= nil,
+        W4.left.strip.castFS:GetText())
+
+    -- the clock reads the RUN, not the pull
+    MD.Replay._runSeek(nil, 100)
+    check("the clock shows the run's time", W4.timeFS:GetText():find("1:40") ~= nil,
+        W4.timeFS:GetText())
+    check("...and says where in the run it is",
+        W4.timeFS:GetText():find("between pulls") ~= nil, W4.timeFS:GetText())
+    MD.Replay._runSeek(nil, 20)
+    check("inside a pull it names the pull",
+        MD.Replay._state().timeFS:GetText():find("pull 1") ~= nil,
+        MD.Replay._state().timeFS:GetText())
+end
+
 print(string.format("\n%d ok, %d failed", ok, #fails))
 if #fails > 0 then for _, m in ipairs(fails) do print("  FAIL " .. m) end; os.exit(1) end

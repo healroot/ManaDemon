@@ -2860,3 +2860,38 @@ The discipline that got there: run the suite against the UNFIXED engine every ti
 refuse to believe a green result until it has gone red first.
 
 solvercheck 58 -> 70. 11 suites green.
+
+## 2026-09-09 — v0.14.1: the run plays end to end
+
+`/md replay run 2` now plays the whole dungeon on one clock. Crossing out of a pull no longer
+stops: **the gaps are played too**, which on the author's Underbog is 51% of the run.
+
+Run mode is a layer over the per-pull replay rather than a rewrite of it. `runT` is the run's
+time, `RunSeek` puts it somewhere, and the existing pull machinery draws whatever pull that
+time lands in. In a gap there is no trace, so `PaintGap` owns the frames: health from the
+run's own 2s samples keyed by name, mana from the same beat, and everything that belongs to a
+fight -- cast bars, HoT icons, labels, borders -- cleared, because nothing is happening and
+the last pull's leftovers would be a lie. The strip says what the run's events say: drinking,
+dead, back up, moving, Innervate, potion.
+
+One bug worth keeping: the first version called `PaintGap()` and then `Paint()`, and `Paint`
+repainted every frame from the last pull's trace -- undoing the gap's bars in the same frame.
+`Paint` now knows about the gap instead of being called alongside it.
+
+**The clock is the run's.** `12:04 / 45:44   pull 17`, or `between pulls`. A clock that reset
+to 0:00 at every pull is what made a dungeon feel like thirty-six separate videos, and the
+scrubber spans the whole run.
+
+`replayui` 87 -> 98: run mode opens on the run's clock, starts in the gap before the first
+pull, crosses into the pull and keeps going into the gap after it without stopping, reaches
+the end of the RUN rather than of a pull, the bars move between combats (0.38 at 4s -> 1.00
+at 100s), the drink is named, and the clock reads the run.
+
+**Still to do**, and stated rather than glossed: the frames are rebuilt at each pull boundary,
+because `RunSeek` reaches the next pull through `OpenReplay`. Playback does not stop, but the
+window re-lays out. Fixing it means one set of frames for the whole run with each pull's
+roster mapped onto them by name, and `PaintFrame` is 190 lines bound to the trace and the
+scenario's target table -- its own piece of work, queued as v0.14.2 with the in-place
+strategy redraw.
+
+12 suites green.

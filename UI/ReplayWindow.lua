@@ -87,6 +87,11 @@ local runStrip                  -- the run's pulls and drinks on one timeline (v
 local stratDrop                                -- the strategy chooser (v0.11.11)
 local openSpec, openForce                      -- what the window was opened with, for a rebuild
 local runIdx, pullIdx, curRun   -- which pull of which run is open, if any
+-- v0.14.0: run mode. The whole dungeon on one clock, gaps included. `runT` is
+-- the RUN's time; the per-pull machinery below is untouched and drives whatever
+-- pull that time lands in, so this is a layer over the pull replay rather than a
+-- rewrite of it.
+local runMode, runTL, runT = false, nil, 0
 local topH = HEADER_H           -- header, plus the run strip when there is one
 local left, right          -- the two columns: { state, frames = {}, strip = {}, title }
 local rp                   -- the SP.Replay result being shown
@@ -850,16 +855,97 @@ local function PaintStrip(s, st, pool, now, col)
         deaths > 0 and string.format("|cffff5555%d dead|r", deaths) or "0 dead"))
 end
 
+-- In a gap there is no trace and no casts: health comes from the run's own 2s
+-- samples (v0.13.7), keyed by name, and mana from the same beat. Everything that
+-- belongs to a fight -- cast bars, HoT icons, labels -- is cleared, because
+-- nothing is happening and the last pull's leftovers would be a lie.
+local function PaintGap()
+    local RTL = MD.RunTimeline
+    local hpBy = RTL.HpAt(runTL, runT)
+    local mana = RTL.ManaAt(runTL, runT)
+    local pool = (runTL.run and runTL.run.pool) or (rp and rp.scenario.pool) or 1
+    for _, ti in ipairs(rows) do
+        local who = rp and rp.rec.roster[ti]
+        for _, col in ipairs({ left, right }) do
+            local f = col and col.frames[ti]
+            if f then
+                local frac = (hpBy and who) and hpBy[who.name] or nil
+                if frac then
+                    f.bar:SetValue(frac)
+                    f.pct:SetText(string.format("%d%%", frac * 100 + 0.5))
+                    f.pct:SetTextColor(1, 1, 1)
+                    local c = f.classColor
+                    f.name:SetTextColor(c[1], c[2], c[3])
+                end
+                if f.isHealer and mana then f.power:SetValue(mana / (pool > 0 and pool or 1)) end
+                f.SetCast("")
+                f.SetLabel("")
+                f.flashUntil, f.textUntil, f.pulseUntil = 0, 0, 0
+                if f.border then f.border[4] = 0 end
+                for _, ic in ipairs(f.hots or {}) do ic:Hide() end
+                if f.dot then f.dot:Hide() end
+                if f.incoming then f.incoming:Hide() end
+            end
+        end
+    end
+    local e = RTL.EventAt(runTL, runT, 8)
+    local RRK = MD.RunRecorder.K
+    local what = "out of combat"
+    if e then
+        if e.kind == RRK.DRINK then what = "drinking"
+        elseif e.kind == RRK.DRINK_END then what = "done drinking"
+        elseif e.kind == RRK.DEAD then what = "dead"
+        elseif e.kind == RRK.ALIVE then what = "back up"
+        elseif e.kind == RRK.ZONE then what = "moving"
+        elseif e.kind == RRK.INNERVATE then what = "Innervate"
+        elseif e.kind == RRK.POTION then what = "potion" end
+    end
+    for _, col in ipairs({ left, right }) do
+        if col then
+            col.strip.cast:SetValue(0)
+            col.strip.castFS:SetText(what)
+            col.strip.castFS:SetTextColor(0.6, 0.6, 0.6)
+            col.strip.wait:SetText("")
+            col.strip.band:SetColorTexture(0.5, 0.5, 0.5, 0)
+            col.strip.why = nil
+        end
+    end
+end
+
 local function Paint()
     if not rp then return end
     local now = GetTime()
     local pool = rp.scenario.pool or 1
-    for _, ti in ipairs(rows) do
-        PaintFrame(left.frames[ti], left.state, ti, true, now)
-        if right and right.state then PaintFrame(right.frames[ti], right.state, ti, false, now) end
+    -- In a gap there is no trace to read: PaintGap owns the frames, and painting
+    -- them from the last pull's state afterwards would immediately undo it.
+    local inGap = false
+    if runMode and runTL then
+        local seg = MD.RunTimeline.At(runTL, runT)
+        inGap = seg and seg.kind == "gap" or false
     end
-    PaintStrip(left.strip, left.state, pool, now, left)
-    if right and right.state then PaintStrip(right.strip, right.state, pool, now, right) end
+    if inGap then
+        PaintGap()
+    else
+        for _, ti in ipairs(rows) do
+            PaintFrame(left.frames[ti], left.state, ti, true, now)
+            if right and right.state then PaintFrame(right.frames[ti], right.state, ti, false, now) end
+        end
+        PaintStrip(left.strip, left.state, pool, now, left)
+        if right and right.state then PaintStrip(right.strip, right.state, pool, now, right) end
+    end
+    if runMode and runTL then
+        -- the RUN's clock. A clock that resets to 0:00 at every pull is what
+        -- made a dungeon feel like thirty-six separate videos.
+        local seg = MD.RunTimeline.At(runTL, runT)
+        timeFS:SetText(string.format("%s / %s   %s", Clock(runT), Clock(runTL.dur),
+            seg and (seg.kind == "pull" and ("pull " .. tostring(seg.k)) or "between pulls") or ""))
+        if not scrubber.dragging then
+            scrubber.settingValue = true
+            scrubber:SetValue(runT)
+            scrubber.settingValue = false
+        end
+        return
+    end
     timeFS:SetText(Clock(left.state.t) .. " / " .. Clock(left.state.dur))
     if not scrubber.dragging then
         scrubber.settingValue = true
@@ -896,11 +982,59 @@ local function SetPlaying(on)
     if on and left.state:AtEnd() then SeekTo(0) end
 end
 
+-- Put the run clock somewhere and make the window show it: inside a pull, open
+-- that pull (if it is not already) and seek to the offset; in a gap, paint the
+-- gap. This is the whole of run mode -- the pull machinery does the rest.
+local function RunSeek(t, keepPlaying)
+    local RTL = MD.RunTimeline
+    runT = math.max(0, math.min(t or 0, runTL.dur))
+    local seg, into = RTL.At(runTL, runT)
+    if not seg then return end
+    if seg.kind == "pull" then
+        if pullIdx ~= seg.k then
+            local was = playing
+            MD:OpenReplay(runIdx .. ":" .. seg.k)
+            if (was or keepPlaying) then SetPlaying(true) end
+        end
+        SeekTo(into)
+    else
+        Paint()
+    end
+end
+
 local function OnUpdate(_, elapsed)
     if not rp or not playing then return end
     local dt = elapsed * speed
     local cap = DT_STEP_MAX * speed
     if dt > cap then dt = cap end
+
+    if runMode and runTL then
+        -- one clock for the whole dungeon. Crossing out of a pull no longer
+        -- stops: the gap is played too, which is where the drinking happens.
+        runT = runT + dt
+        if runT >= runTL.dur then
+            runT = runTL.dur
+            SetPlaying(false)
+            Paint()
+            return
+        end
+        local seg, into = MD.RunTimeline.At(runTL, runT)
+        if seg.kind == "pull" then
+            if pullIdx ~= seg.k then
+                MD:OpenReplay(runIdx .. ":" .. seg.k)
+                playing = true
+                SeekTo(into)
+            else
+                left.state:Advance(dt)
+                if right and right.state then right.state:Advance(dt) end
+            end
+            Paint()
+        else
+            Paint()
+        end
+        return
+    end
+
     left.state:Advance(dt)
     if right and right.state then right.state:Advance(dt) end
     Paint()
@@ -1033,6 +1167,12 @@ local function Build()
     scrubber:SetValueStep(0.05)
     scrubber:SetObeyStepOnDrag(true)
     scrubber:SetScript("OnValueChanged", function(self, v, user)
+        -- in run mode the scrubber IS the run's timeline: dragging it moves
+        -- through the gaps as well as the fights
+        if runMode and runTL and not self.settingValue and (user or self.dragging) then
+            RunSeek(v)
+            return
+        end
         if self.settingValue or not rp then return end
         SeekTo(v)
     end)
@@ -1371,8 +1511,16 @@ function MD:OpenReplay(n)
         spec = spec:gsub("force", ""):gsub("^%s+", ""):gsub("%s+$", "")
         if spec == "" then spec = "1" end
     end
+    -- "/md replay run 2" plays the WHOLE run on one clock, gaps included
+    -- (v0.14.0). "2:7" still opens that one pull. "run 2 pull" opens the run's
+    -- first pull the old way, for when only the fight is wanted.
     local r = spec:match("^run%s*(%d+)$")
+    if r and not runMode then
+        return MD:OpenRunPlay(tonumber(r))
+    end
     if r then spec = r .. ":1" end
+    local rp2 = spec:match("^run%s*(%d+)%s*pull$")
+    if rp2 then spec = rp2 .. ":1" end
     local rec, label, run, pullK = MD:GetRecording(spec)
     if not rec then MD:Print("replay: no recording " .. tostring(n) .. ".") return end
     n = label
@@ -1381,6 +1529,8 @@ function MD:OpenReplay(n)
     Build()
     playing = false
     local t0 = debugprofilestop and debugprofilestop() or 0
+    -- opening a single pull by hand leaves run mode; OpenRunPlay turns it back on
+    if not runMode then runTL, runT = nil, 0 end
     openSpec, openForce = n, force
     rp = SP.Replay(rec, { dt = 0.25, force = force })
     -- v0.13.9: no plan yet? coach it now, and let the window fill in.
@@ -1486,6 +1636,26 @@ function MD:OpenReplay(n)
     frame:Show()
 end
 
+-- /md replay run 2 play  -- the whole dungeon on one clock (docs/SPEC-v0.14.md).
+-- The pull replay is untouched; this drives it from the run's time and fills the
+-- gaps, which is half of a dungeon and where the drinking happens.
+function MD:OpenRunPlay(idx)
+    local run = MD.RunRecorder and MD.RunRecorder:Get(idx)
+    if not run then MD:Print("replay: no run " .. tostring(idx) .. ".") return end
+    local tl = MD.RunTimeline.Build(run)
+    if not tl or #tl.segs == 0 then MD:Print("replay: run " .. tostring(idx) .. " has nothing to play.") return end
+    MD:OpenReplay(idx .. ":1")
+    if not (frame and frame:IsShown()) then return end
+    runMode, runTL, runT = true, tl, 0
+    scrubber:SetMinMaxValues(0, tl.dur)
+    if not tl.hasGapHealth then
+        MD:Print("replay: this run was recorded before v0.13.7, so the gaps have no health "
+            .. "samples - the bars hold their last value between pulls.")
+    end
+    RunSeek(0)
+    SetPlaying(true)
+end
+
 function MD:ToggleReplay(arg)
     if frame and frame:IsShown() and (arg == nil or arg == "") then
         frame:Hide()
@@ -1497,6 +1667,15 @@ end
 MD.Replay = {
     Open = function(_, n) MD:OpenReplay(n) end,
     -- for tools/replayui.lua: what the window is showing, read-only
+    -- for tools/replayui.lua: where the run clock is, and what it thinks is
+    -- happening there
+    _run = function()
+        if not (runMode and runTL) then return nil end
+        local seg, into = MD.RunTimeline.At(runTL, runT)
+        return { t = runT, dur = runTL.dur, seg = seg and seg.kind, k = seg and seg.k,
+                 into = into, hasGapHealth = runTL.hasGapHealth, playing = playing }
+    end,
+    _runSeek = function(_, t) if runMode then RunSeek(t) end end,
     _state = function() return { frame = frame, left = left, right = right, rows = rows, rp = rp,
                                  scrubber = scrubber, timeFS = timeFS, playing = playing, speeds = speedButtons } end,
     _runStrip = function()

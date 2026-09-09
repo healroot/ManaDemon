@@ -42,16 +42,47 @@ Nothing, in the gaps: `hasGapHealth` is false and `HpAt` returns nil rather than
 number. The window holds the last pull's bars, which is the honest rendering of "not
 recorded". The author's Underbog run is in this position; the next one will not be.
 
-## 4. Still to come in this version
+## 4. Run mode in the window (v0.14.1)
 
-- The window in run mode: one set of frames for the whole run, built from `RT.Roster`, with
-  the pull's trace swapped in as the clock crosses into it — **no reopening between pulls**,
-  which is the flicker the author noticed.
-- The run strip as the scrubber for the run clock, with a cursor that moves through the gaps.
-- Changing the strategy redraws the suggested column in place; `RebuildSuggested` currently
-  calls `OpenReplay` and rebuilds the whole window.
+`/md replay run 2` now plays **the whole dungeon on one clock**. `2:7` still opens that one
+pull, and `run 2 pull` opens the run's first pull the old way.
 
-## 5. Harness
+The per-pull machinery is untouched: run mode is a layer over it. `runT` is the run's time,
+`RunSeek` puts it somewhere, and the pull replay draws whatever pull that time lands in.
+Crossing out of a pull no longer stops -- **the gap is played too**.
+
+In a gap there is no trace, so `PaintGap` owns the frames: health from the run's own 2s
+samples keyed by name, mana from the same beat, everything that belongs to a fight (cast
+bars, HoT icons, labels, borders) cleared because nothing is happening. The strip says what
+the run's events say is going on -- drinking, dead, back up, moving, Innervate, potion.
+
+`Paint` had to learn about the gap rather than PaintGap being called alongside it: painting
+the frames from the last pull's trace immediately undid the gap's bars, which is exactly what
+the first version did.
+
+**The clock is the run's.** A clock that reset to 0:00 at every pull is what made a dungeon
+feel like thirty-six separate videos; it now reads `12:04 / 45:44   pull 17` or
+`between pulls`, and the scrubber spans the whole run.
+
+## 5. Still to come in this version
+
+- **The frames are still rebuilt at each pull boundary.** Playback no longer stops there, but
+  `RunSeek` reaches the next pull through `MD:OpenReplay`, which re-lays the window out. The
+  fix is one set of frames for the whole run built from `RT.Roster`, with each pull's roster
+  mapped onto those rows by name. `PaintFrame` is 190 lines bound to the trace and the
+  scenario's target table, so that is its own piece of work rather than a footnote to this
+  one.
+- The run strip drawn as the scrubber's own cursor, moving through the gaps.
+- Changing the strategy redraws the suggested column in place; `RebuildSuggested` still calls
+  `OpenReplay`.
+
+## 6. Harness
+
+`tools/replayui.lua` (87 -> 98) plays a run under the stub: run mode opens on the run's
+clock, starts in the gap before the first pull, **crosses into the pull and keeps going into
+the gap after it without stopping**, reaches the end of the run rather than the end of a
+pull, the health bars move between combats (0.38 at 4s -> 1.00 at 100s), a drink in the gap
+is named, and the clock reads the run with the pull number or "between pulls".
 
 `tools/timeline.lua`, 27 assertions on the model alone: the segments alternate and cover the
 run with no holes or overlaps; a seek lands in the right pull at the right offset; skipping
