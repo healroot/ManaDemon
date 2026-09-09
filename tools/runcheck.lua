@@ -414,6 +414,40 @@ check("no bare pipe on the card", (function()
 end)())
 
 _G.DEFAULT_CHAT_FRAME = realChat
+--------------------------------------------------------------------------------
+-- v0.13.7: the party's health across the whole run, gaps included. Without it a
+-- continuous replay freezes every bar the moment a pull ends -- and the gaps are
+-- where the drinking happens, which is half of what a run is for.
+--------------------------------------------------------------------------------
+do
+    local run = MD.RunRecorder.active or (MD.cdb.runs and MD.cdb.runs[1])
+    check("the run samples party health", run and run.hp ~= nil)
+    if run and run.hp then
+        check("it sampled health more than once", #run.hp.t >= 2,
+            string.format("%d sample(s)", #run.hp.t))
+        check("every sample carries names and fractions together",
+            #run.hp.t == #run.hp.who and #run.hp.t == #run.hp.frac,
+            string.format("%d / %d / %d", #run.hp.t, #run.hp.who, #run.hp.frac))
+        local ok2, frac = true, nil
+        for i = 1, #run.hp.frac do
+            for _, f in ipairs(run.hp.frac[i]) do
+                frac = frac or f
+                if f < 0 or f > 1 then ok2 = false end
+            end
+        end
+        check("health is stored as a fraction", ok2, tostring(frac))
+        -- and it must keep going when nobody is in combat
+        local last = run.hp.t[#run.hp.t] or 0
+        local lastPullEnd = 0
+        for i = 1, #run.ev.t do
+            if run.ev.kind[i] == MD.RunRecorder.K.PULL_END then lastPullEnd = run.ev.t[i] end
+        end
+        check("health is still sampled after the last pull ends",
+            last >= lastPullEnd - 0.01,
+            string.format("last sample %.1fs, last pull ended %.1fs", last, lastPullEnd))
+    end
+end
+
 print(string.format("\n%d ok, %d failed", ok, #fails))
 if #fails > 0 then for _, m in ipairs(fails) do print("  FAIL " .. m) end; os.exit(1) end
 

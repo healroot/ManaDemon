@@ -2732,3 +2732,45 @@ a phantom before that row existed; two were reverted, and the one that survived 
 window fix) had been verified independently on fights that do replay.
 
 11 suites green.
+
+## 2026-09-09 — v0.13.7: the run's gaps get health, and the chooser gets the planners
+
+The author overruled v0.9.4's "there is no run-level play-through": the run feature exists to
+record a dungeon and watch it non-stop, gaps included, with the run strip as the timeline for
+skipping to a fight. That is right and the old call was wrong -- people finish a pull at 40%,
+drink, and walk into the next one full, and none of that was watchable.
+
+**The blocker was data, not the window.** The run recorded only the healer's mana between
+pulls; there was no party health at all, so a continuous replay would have frozen every bar
+the moment a pull ended. `RR:SampleHealth` now samples the party on the same 2s beat as mana
+for the whole run, keyed by NAME rather than roster index because a run outlives any one
+pull's roster, stored as a fraction to two places. `runcheck` (69 -> 74) holds that it keeps
+sampling after the last pull ends, which is the case the feature exists for.
+
+New data, so the author's Underbog run has none of it: a continuous replay of a run recorded
+before today can only draw the bars it has.
+
+**The continuous replay itself is specified, not built** (`docs/SPEC-v0.13.md` §16.2, planned
+as v0.14.0). The window plays a pull -- one trace, one clock. A run needs the run's clock and
+three states: inside a pull, inside a gap (health and mana from `run.hp` / `run.mana`, drinks
+and deaths from the run's events), and the boundary. That is a version's work and half of it
+would be worse than none.
+
+Two smaller things in the same breath. **The strategy chooser listed only the four readings
+of the last search** -- the planners added since v0.13 were nowhere in the UI. It now lists
+every entry in `SP.STRATEGY_SET` first and the search objectives after, prefixed "Search:",
+and picking a planner builds its plan on the spot, so the chooser is useful before Coach has
+ever run. `replayui` 80 -> 84.
+
+**Validating a whole run already existed and was unfindable.** `/md coachrun 1` searches one
+plan for the entire dungeon and `SP.RunGates` gates every pull as part of it; offline that is
+now `tools/import.lua gates --run K`. On the author's Underbog:
+
+```
+The Underbog 08:46: 34 pull(s) validated, 6 failed
+  82% of the run's pulls are safe to coach from
+  mana mean            failed on 4 pull(s)
+  health curves        failed on 2 pull(s)
+```
+
+11 suites green.

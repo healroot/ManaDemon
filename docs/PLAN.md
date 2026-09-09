@@ -263,7 +263,15 @@ read only what a human can see.
   on level 70 raids with the kit calibrated to the log. Measured by `tools/reproduce.lua`.
   Lifebloom is 70% of the healing and the evidence points at the HoT lifecycle -- ticks
   surviving a refresh, and how many HoTs roll at once -- not at spell values.
-- [ ] **v0.13.7** the solver's reasons in the replay and on the card -- it knows the
+- [x] **v0.13.7** the run watched end to end, part one: `RR:SampleHealth` records the
+  party's health across the whole run (gaps included) so a continuous replay has bars to
+  draw; the replay's strategy chooser lists the planners (`SP.STRATEGY_SET`) and not only
+  the last search's objectives; `tools/import.lua gates --run K` validates a whole run at
+  once. *(2026-09-09.)*
+- [ ] **v0.14.0** the continuous run replay: the run's clock, not the pull's, with a gap
+  state driven from `run.hp` / `run.mana` and the run strip as its scrubber
+  (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health.
+- [ ] **v0.13.9** the solver's reasons in the replay and on the card -- it knows the
   number it decided on, so the sentence can name it.
 - [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives
   reading the solver's pool, and the Review tab able to pick which planner coached.

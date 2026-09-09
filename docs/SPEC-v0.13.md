@@ -473,3 +473,66 @@ allowed to roll at once — rather than at what a tick is worth.
 **This supersedes "the `-- VERIFY` heal values block everything".** They are still wrong and
 still worth fixing, but they are not what stops a recording reproducing. `tools/reproduce.lua`
 is the measurement to work against.
+
+
+## 16. The run, watched end to end (v0.13.7 and v0.14)
+
+The author, overruling v0.9.4's "there is no run-level play-through":
+
+> "So I do want to have a 45min replay, and to see how hp bars has changed inbetween of a
+> combat. Thats why there is a full run feature - to record full run, and watch it non-stop.
+> If I want to skip to the next combat there is a timeline bar on top to jump to the exact
+> fight."
+
+That is right and the old call was wrong. The gaps are half of a dungeon -- people finish a
+pull at 40%, drink, and walk into the next one full -- and the run strip is already the
+timeline for skipping.
+
+### 16.1 What was missing, and is now recorded (v0.13.7)
+
+**The run recorded only the healer's mana between pulls.** No party health at all, so a
+continuous replay would have frozen every bar the moment a pull ended. `RR:SampleHealth`
+now samples the party on the same 2s beat as mana, for the whole run, keyed by **name**
+rather than roster index -- a run outlives any one pull's roster. Health is stored as a
+fraction to two places, which is a health bar; more is noise.
+
+`runcheck` holds it: sampled more than once, names and fractions the same length, every
+value inside [0, 1], and **still sampling after the last pull ends**, which is the case the
+whole feature exists for.
+
+This is new data. Runs recorded before v0.13.7 -- the author's Underbog among them -- have
+no gap health, and a continuous replay of one can only show the bars it has.
+
+### 16.2 What is still to build (v0.14)
+
+The replay window plays *a pull*: one trace, one clock, and at the end it opens the next
+pull. A continuous run needs a different clock -- the **run's** clock -- with three states
+rather than one: inside a pull (drive from the trace, as now), inside a gap (drive health
+and mana from `run.hp` / `run.mana`, with drinks and deaths from the run's own events), and
+the boundary between them. The run strip becomes the scrubber for that clock rather than a
+row of buttons, with a cursor that moves through the gaps.
+
+That is a version's work, not an afternoon's, and it is specified here rather than half
+built.
+
+### 16.3 The chooser, and the whole run at once (v0.13.7)
+
+Two smaller things the author asked for in the same breath.
+
+**The replay's strategy chooser listed only the four readings of the last search.** It now
+lists every planner in `SP.STRATEGY_SET` first -- the rules, and the solver in each of its
+four forecasts -- and the search's objectives after them, prefixed `Search:`. A planner
+needs no search behind it: picking one builds the plan on the spot, which is what makes the
+chooser useful before Coach has ever run.
+
+**Validating and coaching a whole run already existed and was not findable.**
+`/md coachrun 1` searches one plan for the entire dungeon, drink policy included, and
+`SP.RunGates` puts every pull through the gates once as part of it. Offline that is now
+`tools/import.lua gates --run K`:
+
+```
+The Underbog 08:46: 34 pull(s) validated, 6 failed
+  82% of the run's pulls are safe to coach from
+  mana mean            failed on 4 pull(s)
+  health curves        failed on 2 pull(s)
+```

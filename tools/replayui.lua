@@ -302,11 +302,14 @@ do
 
     local dd = MD.Replay._strategy()
     check("the strategy chooser is drawn", dd ~= nil and dd:IsVisible())
-    check("it is ONE control, not one per strategy", dd ~= nil and dd:GetWidth() <= 130,
+    check("it is ONE control, not one per strategy", dd ~= nil and dd:GetWidth() <= 200,
         dd and tostring(dd:GetWidth()))
-    check("every objective that has a winner is in the list", dd ~= nil and #dd.items == 4,
+    -- v0.13.7: the list is the PLANNERS (SP.STRATEGY_SET, always available)
+    -- plus the four readings of the last search, prefixed "Search:"
+    check("every objective that has a winner is in the list",
+        dd ~= nil and #dd.items == #SP.STRATEGY_SET + 4,
         dd and tostring(#dd.items))
-    check("it says which one is active", dd ~= nil and dd:GetText() == "Least mana",
+    check("it says which one is active", dd ~= nil and dd:GetText() == "Search: Least mana",
         dd and dd:GetText())
     check("the list is closed until it is asked for", dd ~= nil and not dd.list:IsShown())
     dd:GetScript("OnClick")(dd)
@@ -322,7 +325,7 @@ do
     check("choosing one closes the list", not dd.list:IsShown())
     -- two objectives often win with the SAME plan, so the choice cannot be read
     -- back from the plan: picking one used to show the other (v0.11.13)
-    check("the chooser keeps the strategy that was chosen", dd:GetText() == "Safest",
+    check("the chooser keeps the strategy that was chosen", dd:GetText() == "Search: Safest",
         dd:GetText())
     check("switching strategy changes the plan the column draws",
         SP.plans[rec.id] == safe, tostring(SP.plans[rec.id] == safe))
@@ -340,14 +343,44 @@ do
         for i, it in ipairs(dd.items) do if it.id == "health" then row = dd.rows[i] end end
         row:GetScript("OnClick")(row)
         check("Highest health does not read back as Safest",
-            MD.Replay._strategy():GetText() == "Highest health",
+            MD.Replay._strategy():GetText() == "Search: Highest health",
             MD.Replay._strategy():GetText())
     end
 
-    -- a fight with no strategies shows no row at all
+    -- v0.13.7: a planner needs no search behind it. Picking one builds the plan
+    -- on the spot, which is what makes the chooser useful before Coach has run.
+    do
+        local dd2 = MD.Replay._strategy()
+        local row
+        for i, it in ipairs(dd2.items) do if it.id == "solver-blind" then row = dd2.rows[i] end end
+        check("the solver is offered without a search having run", row ~= nil)
+        if row then
+            row:GetScript("OnClick")(row)
+            check("choosing the solver builds its plan on the spot",
+                SP.plans[rec.id] ~= nil and SP.plans[rec.id].kind == "solver",
+                SP.plans[rec.id] and tostring(SP.plans[rec.id].kind) or "no plan")
+            check("and the chooser says so", MD.Replay._strategy():GetText() == "Solver: no intuition",
+                MD.Replay._strategy():GetText())
+        end
+        -- put the searched plan back: the tests below this one are about the
+        -- column that plan draws, not about the chooser
+        SP.plans[rec.id] = cheap
+        SP.strategyPick[rec.id] = nil
+        MD:OpenReplay(1)
+    end
+
+    -- With no search there are still the planners, so the chooser stays: what
+    -- removes it is having no suggested column to point at.
     SP.strategies[rec.id] = nil
+    SP.strategyPick[rec.id] = nil
     MD:OpenReplay(1)
-    check("no strategies, no chooser", not MD.Replay._strategy():IsVisible())
+    check("no search, but the planners are still offered",
+        MD.Replay._strategy():IsVisible() and #MD.Replay._strategy().items == #SP.STRATEGY_SET,
+        tostring(#MD.Replay._strategy().items))
+    SP.plans[rec.id] = nil
+    MD:OpenReplay(1)
+    check("no suggested column, no chooser", not MD.Replay._strategy():IsVisible())
+    SP.plans[rec.id] = cheap        -- the sections below need a right column
 end
 
 -- v0.11.14: the strip carries the two numbers a strategy comparison needs

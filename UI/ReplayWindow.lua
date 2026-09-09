@@ -949,12 +949,32 @@ local function Build()
     -- rather than four buttons: the names are long and ran off the window
     -- (v0.11.11). Switching does NOT search again -- the plans are in hand and
     -- this redraws the suggested column from the chosen one.
-    stratDrop = UI.CreateDropdown(frame, 124, 16, function(id)
-        local w = rp and rp.rec and MD.SimPlanner.strategies[rp.rec.id]
-        w = w and w[id]
-        if not w then return end
-        MD.SimPlanner.plans[rp.rec.id] = w.plan
-        MD.SimPlanner.strategyPick[rp.rec.id] = id
+    stratDrop = UI.CreateDropdown(frame, 180, 16, function(id)
+        local SP = MD.SimPlanner
+        if not (rp and rp.rec) then return end
+        -- v0.13.7: two kinds of entry share this list. A search objective picks
+        -- one of the plans the search already found; a STRATEGY_SET entry is a
+        -- whole planner (the rules, or the solver in one of its configurations)
+        -- and is built here on demand -- it needs no search at all, which is why
+        -- the chooser now has something to offer before Coach has ever run.
+        local entry = SP.Strategy and SP.Strategy(id)
+        if entry then
+            local kit = MD.RankMath:SpellKit({ live = true })
+            local sc = MD.SimModel.ScenarioFromRecording(rp.rec, kit)
+            local plan = SP.MakeStrategy(entry, SP.BindsFromRecording and
+                SP.BindsFromRecording(rp.rec) or SP.MaxRankBinds(), kit,
+                { scenario = sc, seed = rp.rec.id or 1,
+                  encounter = rp.rec.encounter, zone = rp.rec.zone,
+                  recs = MD.cdb and MD.cdb.recordings, excludeID = rp.rec.id })
+            if not plan then return end
+            SP.plans[rp.rec.id] = plan
+        else
+            local w = SP.strategies[rp.rec.id]
+            w = w and w[id]
+            if not w then return end
+            SP.plans[rp.rec.id] = w.plan
+        end
+        SP.strategyPick[rp.rec.id] = id
         MD:RebuildSuggested()
     end)
     stratDrop:Hide()
@@ -1360,15 +1380,26 @@ function MD:OpenReplay(n)
         local SP = MD.SimPlanner
         local winners = rp.rec and SP.strategies[rp.rec.id]
         local items, current = {}, nil
-        if winners and rp.right then
-            for _, obj in ipairs(SP.OBJECTIVES) do
-                local w = winners[obj.key]
-                if w then
-                    items[#items + 1] = { id = obj.key, text = obj.name, tooltip = obj.what }
-                    -- what the author CHOSE, not the first objective that
-                    -- happens to share the winning plan
-                    if SP.strategyPick[rp.rec.id] == obj.key then current = obj.key end
-                    if not current and SP.plans[rp.rec.id] == w.plan then current = obj.key end
+        if rp.right and rp.rec then
+            local pick = SP.strategyPick[rp.rec.id]
+            -- the planners first: they are available whether or not a search has
+            -- run, and they are what the author is actually choosing between
+            for _, e in ipairs(SP.STRATEGY_SET or {}) do
+                items[#items + 1] = { id = e.key, text = e.label, tooltip = e.why }
+                if pick == e.key then current = e.key end
+            end
+            -- then the four readings of the last search, when there was one
+            if winners then
+                for _, obj in ipairs(SP.OBJECTIVES) do
+                    local w = winners[obj.key]
+                    if w then
+                        items[#items + 1] = { id = obj.key, text = "Search: " .. obj.name,
+                                              tooltip = obj.what }
+                        -- what the author CHOSE, not the first objective that
+                        -- happens to share the winning plan
+                        if pick == obj.key then current = obj.key end
+                        if not current and SP.plans[rp.rec.id] == w.plan then current = obj.key end
+                    end
                 end
             end
         end

@@ -8,6 +8,8 @@
 --   runs                 every stored RUN with its stats (v0.9.2)
 --   spells N             what recording N spent its mana on, by kind (v0.10.1)
 --   validate N           the full gate report for recording N (1 = most recent)
+--   gates --run K        every pull of run K through the gates at once, summarised
+--                        by which gate failed and how often (SP.RunGates)
 --   replay N             the trace: every own cast with its target and label, the
 --                        mana fit, each target's lowest health
 --   coach N [force]      the search and the card (force: even if the gates failed)
@@ -368,6 +370,25 @@ elseif cmd == "coach" then
     if not done then Say("coach: the search did not finish in %d frames", frames); os.exit(1) end
     for _, line in ipairs(out) do Say("%s", Strip(line)) end
     if h then Say("(search ran across %d stub frames)", frames) end
+
+elseif cmd == "gates" then
+    if not opts.run then
+        Say("gates: needs --run K (it validates a whole run at once).")
+        os.exit(2)
+    end
+    local run = MD.RunRecorder:Get(opts.run)
+    if not run then Say("gates: no run %d.", opts.run); os.exit(2) end
+    local g = SP.RunGates(run, kit)
+    Say("")
+    Say("%s: %d pull(s) validated, %d failed", run.name or "run", g.of or 0, g.failed or 0)
+    if (g.of or 0) > 0 then
+        Say("  %d%% of the run's pulls are safe to coach from",
+            math.floor(100 * ((g.of - g.failed) / g.of) + 0.5))
+    end
+    for _, name in ipairs(g.order or {}) do
+        Say("  %-20s failed on %d pull(s)", name, g.byGate[name] or 0)
+    end
+    if (g.failed or 0) == 0 then Say("  every gate passed on every pull") end
 
 elseif cmd == "export" then
     -- MD:Export renders everything; this keeps the head sections (fights,

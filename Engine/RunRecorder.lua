@@ -201,6 +201,14 @@ function RR:Start(reason, name)
         reason = reason or "manual",
         pulls = {},
         mana = { t = {}, v = {} },
+        -- v0.13.7: the party's health across the WHOLE run, gaps included. The
+        -- run existed to be watched end to end and the gaps are half of it --
+        -- people finish a pull at 40%, drink, and walk in full. Without this the
+        -- bars freeze at whatever the last pull left them on. Sampled on the same
+        -- 2s beat as mana and keyed by name, because the roster is per pull and a
+        -- run outlives it. Costs ~5 numbers a sample: a 45 minute run is ~1350
+        -- samples, well inside MAX_GAP_EV's intent.
+        hp = { t = {}, who = {}, frac = {} },
         ev = { t = {}, kind = {}, a = {}, b = {} },
         zones = { zone },
         truncated = false, pinned = false,
@@ -218,6 +226,30 @@ function RR:Start(reason, name)
     end
     MD:Debug("sim", "run started: %s (%s), pool %d", run.name, run.reason, run.pool)
     return run, nil
+end
+
+-- The party's health, as fractions, on the run's own clock. Names rather than
+-- roster indices: a run spans many pulls and each pull builds its own roster.
+function RR:SampleHealth(run, t)
+    local hp = run.hp
+    if not hp then return end
+    if #hp.t >= RR.MAX_GAP_EV then return end
+    local names, fracs = {}, {}
+    local T = MD.Targets
+    for _, e in pairs((T and T.byGUID) or {}) do
+        local unit = e.unit
+        if unit and not e.isPet and UnitExists and UnitExists(unit) then
+            local cur, max = UnitHealth(unit) or 0, UnitHealthMax(unit) or 0
+            if max > 0 then
+                names[#names + 1] = e.name
+                -- two decimal places is a health bar; more is noise
+                fracs[#fracs + 1] = math.floor((cur / max) * 100 + 0.5) / 100
+            end
+        end
+    end
+    if #names == 0 then return end
+    local n = #hp.t + 1
+    hp.t[n], hp.who[n], hp.frac[n] = t, names, fracs
 end
 
 function RR:Clock(sec)
@@ -416,6 +448,7 @@ MD:OnTick(function(dt)
         local mn = run.mana
         local n = #mn.t + 1
         mn.t[n], mn.v[n] = t, Mana()
+        RR:SampleHealth(run, t)
         -- a potion leaves the bags; the count is the only signal that does not
         -- need a spell id nobody has verified on this client
         if MD.ManaCooldowns and GetItemCount then
