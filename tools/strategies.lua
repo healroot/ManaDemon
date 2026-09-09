@@ -111,7 +111,27 @@ end
 print(string.format("%d recording(s)%s\n", #pool,
     OBS and "   [kit scaled to what the log says each spell healed]" or ""))
 
+-- THE CONTROL, first row. The recorded casts through the same engine: what the
+-- human actually did. Without it you cannot tell a planner's deaths from the
+-- engine's -- on a held-out raid fight every strategy lost one person, and so
+-- did the human's own casts, in a fight where nobody really died.
+local cd, cf, cm, cn = 0, 0, 0, 0
+for _, e in ipairs(pool) do
+    ApplyProfile(e.profile)
+    local kit = MD.RankMath:SpellKit({ live = true })
+    kit = (Calibrate(kit, e.who))
+    local sc = SM.ScenarioFromRecording(e.rec, kit)
+    if sc then
+        local r = SM:Run(sc, nil, { critMode = "ev" })
+        cd = cd + (r.deaths and r.deaths.n or 0)
+        cf = cf + (r.floorSeconds or 0)
+        cm = cm + (r.manaSpent or 0)
+        cn = cn + (e.rec.ownCasts or 0)
+    end
+end
 print(string.format("%-26s %-46s %s", "strategy", "total over every recording", "causal?"))
+print(string.format("%-26s deaths %2d  floor %6.1fs  mana %7.0f  %4d casts   %s",
+    "the recorded casts", cd, cf, cm, cn, "<- the CONTROL"))
 local rows = {}
 for _, entry in ipairs(SP.STRATEGY_SET) do
     local d, f, m, casts = 0, 0, 0, 0

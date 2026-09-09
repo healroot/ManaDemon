@@ -252,7 +252,13 @@ read only what a human can see.
   strategies on a held-out Warcraft Logs fight: the human cast 82 times, the solver 26.
   *(2026-09-09; casts 26 -> 52 on that fight, deaths 2 -> 1; the author's-recordings
   headline drops from 43% to 33% because part of the old saving was under-casting.)*
-- [ ] **v0.13.5** the solver's reasons in the replay and on the card -- it knows the
+- [x] **v0.13.5** the control row: every strategy table now leads with the recorded casts
+  through the same engine, because a planner's deaths cannot be told from the simulation's
+  without it. Plus `sag` (convex deficit weighting -- measured inert, ships at 0) and
+  `AtRisk` treating being under the danger line as a fact rather than a forecast.
+  *(2026-09-09; the control showed the raid fight's death belongs to the engine, which
+  retracts v0.13.4's "the rules edge the solver on raids".)*
+- [ ] **v0.13.7** the solver's reasons in the replay and on the card -- it knows the
   number it decided on, so the sentence can name it.
 - [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives
   reading the solver's pool, and the Review tab able to pick which planner coached.

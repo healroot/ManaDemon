@@ -2691,3 +2691,44 @@ extra person. Neither prior helps.
 A clean verdict still needs the level 70 heal values fixed so the fight replays at all.
 
 11 suites green.
+
+## 2026-09-09 — v0.13.5: the control row, and a retraction
+
+The author restated the preference: "we prefer top up people health, minimal overheal is
+good, but underheal is bad, also new death is unacceptable."
+
+The score already orders that way -- deaths first and absolutely, then `floorSeconds`
+(time under the measured danger line, which *is* the underheal metric), then mana. What was
+missing was in the solver's decision, and two changes were tried. **`sag`** weights the gap
+integral so a missing point counts more the lower the target already is; it is implemented,
+tunable, and **measured inert** -- identical results at 0, 1, 2, 4 and 8 on the author's
+recordings and noise on the raid fight -- so it ships at 0 and is documented as unproven
+rather than quietly switched on. **`AtRisk`** now treats a target already under the danger
+line as at risk whatever the trailing damage rate says; the old test projected forward from
+the current rate, so somebody at a tenth of their health with the burst over read as safe.
+
+A third change, capping how often the plan may defer, made the raid fight strictly worse
+(one death became two) and was reverted.
+
+**And then the control, which should have been run first.** Replaying the human's OWN casts
+through our engine on the held-out raid fight kills one person -- in a fight where the log
+records zero deaths. Every strategy also loses one. So that death is the engine's floor, not
+any planner's decision, and **v0.13.4's "the threshold rules edge the solver on a hard raid
+fight" is retracted**: no ranking on the deaths column meant anything there.
+
+Every strategy table now leads with that control row:
+
+```
+held-out raid fight, kit corrected -- the log records ZERO deaths
+the recorded casts     deaths 1  floor 11.3s  mana 24281  82 casts   <- the CONTROL
+Rules: HoTs only       deaths 1  floor  2.2s  mana 11053  44 casts
+Rules: balanced        deaths 1  floor  3.2s  mana 15835  52 casts
+Solver: no intuition   deaths 1  floor  5.7s  mana 12923  52 casts
+```
+
+Read against the control, every planner beats the recorded play on both readable columns --
+a quarter of the time under the danger line, half the mana. Three changes were made chasing
+a phantom before that row existed; two were reverted, and the one that survived (v0.13.4's
+window fix) had been verified independently on fights that do replay.
+
+11 suites green.

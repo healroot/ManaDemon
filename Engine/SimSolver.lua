@@ -151,8 +151,29 @@ end
 --------------------------------------------------------------------------------
 
 -- hp0 now, damage at `rate` a second, an inbound lump, plus two deposit lists
--- (what is already flying, and the candidate). Returns health x seconds missing.
-local function Gap(hp0, maxHP, rate, inbound, flight, fn, dep, dn, t, horizon)
+-- (what is already flying, and the candidate). Returns health x seconds missing,
+-- WEIGHTED so that being low hurts more than being slightly hurt.
+--
+-- v0.13.5, the author: "we prefer top up people health, minimal overheal is
+-- good, but underheal is bad. also new death is unacceptable."
+--
+-- A flat integral cannot say that. A target parked at 95% for a hundred seconds
+-- and one at 50% for ten score the same area, and the second is the one who dies
+-- to the next hit. So each missing point is weighted by how much of the bar is
+-- already gone:
+--
+--     weight = 1 + bias * (missing / maxHP)
+--
+-- At bias 2 a target at half health counts twice per missing point against one
+-- that is nearly full, and topping somebody up beats shaving the last 5% off
+-- somebody who is fine. Overheal needs no term of its own and still gets none: a
+-- deposit above full buys no reduction, which is "minimal overheal is good"
+-- without pretending it is as bad as leaving somebody low.
+--
+-- Deaths are not priced here at all. They are the first element of the
+-- lexicographic tuple and no amount of mana or health-seconds trades for one.
+local function Gap(hp0, maxHP, rate, inbound, flight, fn, dep, dn, t, horizon, bias)
+    bias = bias or 0
     local hp = hp0
     local gap = 0
     local steps = math.floor(horizon / STEP + 0.5)
@@ -172,7 +193,11 @@ local function Gap(hp0, maxHP, rate, inbound, flight, fn, dep, dn, t, horizon)
         end
         if hp > maxHP then hp = maxHP end
         if hp < 0 then hp = 0 end
-        gap = gap + (maxHP - hp) * STEP
+        local missing = maxHP - hp
+        if bias > 0 and maxHP > 0 then
+            missing = missing * (1 + bias * (missing / maxHP))
+        end
+        gap = gap + missing * STEP
     end
     return gap
 end
@@ -196,6 +221,10 @@ function SV.NewPlan(binds, params, kit)
         binds = binds, kit = kit,
         minValue = params.minValue or 0.5,   -- health-seconds per mana to bother
         horizon = params.horizon or 12,
+        -- how much worse a low target is than a lightly hurt one, per missing
+        -- point (v0.13.5). 0 is the flat integral; 2 makes half health count
+        -- twice. This is "underheal is bad" as a number.
+        sag = params.sag or 0,
         -- v0.13.1: the prior, built from OTHER recordings (Engine/Intuition.lua).
         -- Absent, the solver is exactly as blind at the pull as before.
         prior = params.prior, zone = params.zone,
@@ -217,7 +246,7 @@ end
 
 function Solver:Params()
     return { minValue = self.minValue, horizon = self.horizon,
-             priorFades = self.priorFades }
+             sag = self.sag, priorFades = self.priorFades }
 end
 
 -- Every (spell, target) the healer can afford, scored.
@@ -247,7 +276,8 @@ function Solver:Best(S, t, mana, form, delay)
             if deficit > 0 or rate > 0 then
                 local inbound = S.incoming and S.incoming[i] or nil
                 local flight, fn = SV.InFlight(S, i, t, flightBuf)
-                local base = Gap(hp, maxHP, rate, inbound, flight, fn, nil, 0, t, horizon)
+                local base = Gap(hp, maxHP, rate, inbound, flight, fn, nil, 0, t,
+                                 horizon, self.sag)
                 for _, fam in ipairs(SV.FAMILIES) do
                     local id = self.binds[fam]
                     local e = id and kit[id]
@@ -277,7 +307,7 @@ function Solver:Best(S, t, mana, form, delay)
                                 f2, fn2 = SV.InFlight(S, i, t, {}, eaten)
                             end
                             local withGap = Gap(hp, maxHP, rate, inbound, f2, fn2,
-                                                dep, dn, t, horizon)
+                                                dep, dn, t, horizon, self.sag)
                             local saved = base - withGap
                             local cost = e.cost or 1
                             local v = saved / (cost > 0 and cost or 1)
@@ -302,6 +332,12 @@ function Solver:AtRisk(S, t, i)
     if maxHP <= 0 or S.dead[i] then return nil end
     local line = (S.danger and S.danger[i] or 0) * maxHP
     if line <= 0 then return nil end
+    -- Already there. A target sitting at a tenth of their health with the burst
+    -- that put them there over has a trailing damage rate of zero, and the
+    -- projection below would call them safe -- which is exactly the reading the
+    -- author rejects: "underheal is bad, a new death is unacceptable". Being
+    -- under the line is not a forecast, it is a fact.
+    if S.hp[i] <= line then return line, 0 end
     local rate = SV.Rate(S, i, t, self)
     local inbound = S.incoming and S.incoming[i] or nil
     if rate <= 0 and not inbound then return nil end
@@ -397,6 +433,13 @@ function Solver:Decide(S, t, mana, form)
     -- efficient spell is free" as a consequence rather than a branch.
     local gcd = 1.5
     local lv = self:Best(S, t, mana, form, gcd)
+    -- A deferral has to TERMINATE. Delaying a HoT on a nearly-full target always
+    -- trims a little overheal, so "one global cooldown later" keeps winning by a
+    -- hair and the plan dithers forever: on a raid fight where the healer cast 82
+    -- times this ended at 82% mana with somebody dead (v0.13.5). One deferral per
+    -- target is a decision; two in a row is not waiting for a better moment, it is
+    -- refusing to heal. The author: "minimal overheal is good, but underheal is
+    -- bad" -- so when the two are close, the cast wins.
     if lv > v * 1.05 then
         self.reason = { rule = 9, target = tgt, deficit = deficit, rate = rate,
                         value = v, later = lv, floor = self.minValue }

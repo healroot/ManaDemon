@@ -376,10 +376,56 @@ Solver: intuition from many raids  deaths 1  floor 7.7s  mana 14023  57 casts  c
 Solver: blurred foresight          deaths 2  floor 5.6s  mana 15377  53 casts  NOT causal
 ```
 
-On a hard raid fight the **threshold rules edge the solver**, which is the reverse of the
-author's dungeon pulls: everyone loses one person, and the rules spend their mana keeping
-people further off the floor. Blurred foresight is last and loses somebody extra. Neither
-prior helps, again.
+**This table was read wrongly at first, and the correction is §13.**
 
-The clean verdict needs the level 70 heal values fixed so the fight replays at all. Until
-then this is one data point that says the solver's advantage is not universal.
+
+## 13. The control row (v0.13.5)
+
+§12 concluded that the rules "edge the solver" on a raid because every solver variant lost a
+person. That conclusion was wrong, and the thing that would have caught it immediately is
+now the first row of every table: **the recorded casts through the same engine.**
+
+```
+held-out raid fight, kit corrected -- the log itself records ZERO deaths
+the recorded casts     deaths 1  floor 11.3s  mana 24281  82 casts   <- the CONTROL
+Rules: HoTs only       deaths 1  floor  2.2s  mana 11053  44 casts
+Rules: balanced        deaths 1  floor  3.2s  mana 15835  52 casts
+Solver: reactive       deaths 1  floor  3.4s  mana 15076  56 casts
+Solver: no intuition   deaths 1  floor  5.7s  mana 12923  52 casts
+Solver: blurred foresight  deaths 2  floor 5.6s  mana 15377  53 casts
+```
+
+**Replaying what the human actually did kills one person too, in a fight where nobody
+died.** So that death is the engine's floor, not any planner's decision, and no ranking on
+the deaths column means anything here. Every planner in fact beats the recorded play on both
+of the columns that can be read: half the time under the danger line, and half the mana.
+
+Without the control row a planner's failures cannot be told apart from the simulation's, and
+three separate changes were made chasing that phantom before the control was run. Two of
+them were reverted; the one that survived is §12.1's window fix, which was verified
+independently on the author's own recordings, and which is real.
+
+## 14. What "underheal is bad" cost, and what it bought (v0.13.5)
+
+> "we prefer top up people health, minimal overheal is good, but underheal is bad, also new
+> death is unacceptable"
+
+The score already orders exactly that way — `deaths` first and absolutely, then
+`floorSeconds` (time spent under the measured danger line, which *is* the underheal metric),
+then mana. Nothing trades against a death.
+
+What was missing was in the solver's *decision*, and two changes were tried:
+
+- **`sag`** — the gap integral weighted so a missing point counts more the lower the target
+  already is: `weight = 1 + sag * (missing / maxHP)`. At `sag = 2` half health counts twice.
+  It is implemented, tunable, and **measured inert**: identical results at 0, 1, 2, 4 and 8
+  on the author's recordings, and noise on the raid fight. It ships at 0 and is documented
+  as unproven rather than quietly enabled.
+- **`AtRisk` on the present, not only the forecast** — a target already at or below the
+  measured danger line is at risk whatever the trailing damage says. The old test projected
+  forward from the current rate, so somebody sitting at a tenth of their health with the
+  burst already over read as safe. That is plainly wrong under "underheal is bad" and is
+  fixed, though this corpus does not exercise it.
+
+A third change — capping how often the plan may defer — made the raid fight strictly worse
+(one death became two) and was reverted.
