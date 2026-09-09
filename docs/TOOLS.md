@@ -65,6 +65,18 @@ bash tools/run.sh tools/import.lua validate 3 --run 1   # run 1, pull 3 (the "1:
 Options: `--file <path>` (default `$MD_SAVEDVARS`, then `.logs/ManaDemon.lua`, then the
 author's install), `--char "Name-Realm"`, `--run K`.
 
+### `reproduce.lua` — does the engine reproduce the recording at all?
+
+```bash
+bash tools/run.sh tools/reproduce.lua .logs/wcl-holdout.lua .logs/wcl-holdout-observed.lua
+```
+
+Replays a recording's own casts and reports how much of the **recorded healing** the engine
+generates from them. Run this before believing any comparison: it currently comes back
+42-70%, which is why health curves fail their gate and why a planner's deaths cannot be told
+from the engine's. With an `observed.lua` the kit is first scaled to what the log says each
+spell healed, so spell values are removed from the question.
+
 ### `solvercmp.lua` — the solver against the threshold rules
 
 ```bash

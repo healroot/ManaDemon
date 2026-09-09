@@ -258,11 +258,16 @@ read only what a human can see.
   `AtRisk` treating being under the danger line as a fact rather than a forecast.
   *(2026-09-09; the control showed the raid fight's death belongs to the engine, which
   retracts v0.13.4's "the rules edge the solver on raids".)*
+- [ ] **v0.13.6** (now the real blocker) the engine generates **42-70% of the recorded
+  healing** from the identical script, on level 64 fights with verified spell data as well as
+  on level 70 raids with the kit calibrated to the log. Measured by `tools/reproduce.lua`.
+  Lifebloom is 70% of the healing and the evidence points at the HoT lifecycle -- ticks
+  surviving a refresh, and how many HoTs roll at once -- not at spell values.
 - [ ] **v0.13.7** the solver's reasons in the replay and on the card -- it knows the
   number it decided on, so the sentence can name it.
 - [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives
   reading the solver's pool, and the Review tab able to pick which planner coached.
-- [ ] **v0.13.6** (blocks any real verdict on the forecasts) correct the `-- VERIFY` heal values in `Data/SpellData.lua` from the
+- [ ] **v0.13.8** correct the `-- VERIFY` heal values in `Data/SpellData.lua` from the
   Warcraft Logs corpus (`tools/wclcheckkit.lua` measures the error; Rejuvenation R13 and
   Regrowth R10 are 1.6-1.8x out), then re-run the comparison on the level 70 imports.
 

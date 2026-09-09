@@ -429,3 +429,47 @@ What was missing was in the solver's *decision*, and two changes were tried:
 
 A third change — capping how often the plan may defer — made the raid fight strictly worse
 (one death became two) and was reverted.
+
+
+## 15. Why there is a death in the replay when there was none in the log (v0.13.6)
+
+Traced, and the answer moves the roadmap.
+
+The tank, Handirel, dies at 49.4s in our replay. The log has him at 63% at t=45 and 69% at
+t=50 — he was never close. Over the whole fight he took 158,435 damage and received 186,247
+healing on a 15,004 health pool.
+
+`tools/reproduce.lua` asks the one question the health-curve gate never did: **replaying the
+recorded casts, how much of the recorded healing does the engine actually generate?**
+
+```
+Prince Malchezaar   log 301535   engine 131517   44%   deaths 0 -> 1
+```
+
+**With the per-tick magnitudes calibrated to the log exactly.** The calibrated Lifebloom is
+176 a stack, so 528 at three stacks, which is the log's median tick to the point. So the
+shortfall is not spell values, not talents, not +healing. From the same 82 casts and the
+same 24,281 mana the engine simply makes half the healing.
+
+And it is not a level 70 problem, which is what this was blamed on for several versions:
+
+```
+the author's own level 64 recordings, no calibration, spell data verified in game
+Hellfire Peninsula   log  23742   engine 11156   47%
+Hellfire Peninsula   log  45760   engine 23945   52%
+Hellfire Peninsula   log   7834   engine  5469   70%
+Hellfire Peninsula   log   5512   engine  2330   42%
+```
+
+Between 42% and 70% everywhere. The author's fights pass their gates only because they have
+enough slack to survive it; a raid does not.
+
+Lifebloom is 70% of the healing on the held-out fight — 59 casts, **324 tick events**, 3,577
+gross per cast — and a full three-stack Lifebloom in our model is worth 6,654, so the model
+over-values a cast that runs its whole duration while under-producing across the fight. That
+points at the **HoT lifecycle** — how many ticks survive a refresh, and how many HoTs are
+allowed to roll at once — rather than at what a tick is worth.
+
+**This supersedes "the `-- VERIFY` heal values block everything".** They are still wrong and
+still worth fixing, but they are not what stops a recording reproducing. `tools/reproduce.lua`
+is the measurement to work against.
