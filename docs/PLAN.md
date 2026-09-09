@@ -275,9 +275,16 @@ read only what a human can see.
   into `/md replay N`. A fight that does not replay still is not coached silently -- the hint
   names the failing gate and the `force` spelling -- and an explicit Coach cancels the
   automatic one. `db.replayAutoCoach`. *(2026-09-09.)*
+- [x] **v0.13.10** live crash: `SP.Classify` read `plan.rollStacks`, a threshold-rules
+  field the solver does not have, so picking a solver in the replay's chooser took the
+  window down. *(2026-09-09; the regression test needed three attempts -- the first eight
+  assertions passed vacuously on a wrong call signature.)*
 - [ ] **v0.14.0** the continuous run replay: the run's clock, not the pull's, with a gap
   state driven from `run.hp` / `run.mana` and the run strip as its scrubber
-  (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health.
+  (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health. **Seamless
+  is the requirement**: no reopening between pulls, and changing the strategy must redraw the
+  suggested column in place rather than rebuild the window (`RebuildSuggested` currently calls
+  `OpenReplay`, which is why it flickers).
 - [ ] **v0.13.9** the solver's reasons in the replay and on the card -- it knows the
   number it decided on, so the sentence can name it.
 - [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives

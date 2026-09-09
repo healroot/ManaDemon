@@ -607,3 +607,40 @@ the automatic search blocking the author's own. Theirs wins: ours is cancelled.
 For a whole run the shape is unchanged: `/md coachrun N [force]` searches one plan for the
 dungeon, because a run's plan is a different question from a pull's, and (v0.13.8) it now
 hands that plan to every pull so the replay draws it.
+
+
+## 19. The classifier assumed a rules plan (v0.13.10)
+
+A live error, from the author:
+
+```
+SimPlanner.lua:877: attempt to compare nil with number
+  Classify -> Replay -> OpenReplay -> RebuildSuggested
+  plan = { kind = "solver", minValue = 15, horizon = 18, ... }
+```
+
+`SP.Classify` labels a Lifebloom cast `stack` when the target already has the plan's roll
+target, and read `plan.rollStacks` to do it. **That is a threshold-rules parameter.** The
+solver has no such field, and v0.13.7 -- putting the planners in the replay's chooser -- made
+`Classify` reachable with a solver plan for the first time. Choosing one took the window down.
+
+`local roll = plan.rollStacks or 0`, and no roll target means no cast can be one stack too
+many.
+
+### 19.1 Three tests that passed for the wrong reason
+
+Writing the regression test was more instructive than the fix.
+
+The first version called `SP.Classify(rec, plan, kit)`. The real signature is
+`(rec, scenario, plan, kit)` -- so `scenario` received the plan, the run classified nothing,
+and **eight assertions passed vacuously**, including one per strategy. A test that cannot
+fail is worse than no test, because it is counted.
+
+With the arguments right it still did not bite: the shared fixture casts Lifebloom exactly
+once, so the cast never lands on a live one and the branch is never entered. The recording
+has to *roll* Lifebloom -- four casts inside one seven-second duration, which is what the
+author's log had at three stacks.
+
+Only then did it reproduce, and the discipline that got there was running the suite against
+the **unfixed** engine every time and refusing to believe a green result until it had gone
+red first.

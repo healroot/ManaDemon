@@ -874,7 +874,13 @@ function SP.Classify(rec, scenario, plan, kit)
                 label = "fine"   -- right spell, the plan just had somebody worse in mind
             elseif sd.family == "Lifebloom" then
                 local st = ti and ti >= 1 and S.hots[ti] and S.hots[ti][HOT_INDEX.Lifebloom]
-                if st and st.active and st.stacks >= plan.rollStacks and plan.rollStacks > 0 then
+                -- v0.13.10: `rollStacks` is a THRESHOLD-RULES parameter. The
+                -- solver has no such field, and since v0.13.7 the replay's
+                -- chooser can hand Classify a solver plan -- which made this
+                -- compare a number with nil and take the whole window down.
+                -- No roll target means no cast can be "one stack too many".
+                local roll = plan.rollStacks or 0
+                if st and st.active and roll > 0 and st.stacks >= roll then
                     label = "stack"
                     stacks = st.stacks
                 end

@@ -2830,3 +2830,33 @@ That is exactly the kind of regression an offline UI suite exists for, and `revi
 on it within a minute of the change.
 
 replayui 84 -> 87, reviewui 43 -> 44. 11 suites green.
+
+## 2026-09-09 — v0.13.10: the classifier assumed a rules plan
+
+A live error from the author, with the whole stack and every local:
+
+```
+SimPlanner.lua:877: attempt to compare nil with number
+plan = { kind = "solver", minValue = 15, horizon = 18, ... }
+```
+
+`SP.Classify` labels a Lifebloom `stack` when the target already holds the plan's roll
+target, and read `plan.rollStacks` for it -- a threshold-rules parameter the solver does not
+have. v0.13.7 put the planners in the replay's chooser, which made `Classify` reachable with
+a solver plan for the first time, and picking one crashed the window. `plan.rollStacks or 0`.
+
+**Writing the regression test taught more than the fix.** The first version called
+`SP.Classify(rec, plan, kit)`; the signature is `(rec, scenario, plan, kit)`, so the plan
+landed in the scenario slot, nothing was classified, and eight assertions -- one per strategy
+-- passed vacuously. A test that cannot fail is worse than none, because it is counted.
+
+With the arguments right it still did not bite: the shared fixture casts Lifebloom once, so
+it never lands on a live one and the branch is never entered. The recording has to roll it --
+four casts inside one seven-second duration, which is what the author's log had at three
+stacks. Only then did the suite reproduce the exact error, and only then was the fix worth
+anything.
+
+The discipline that got there: run the suite against the UNFIXED engine every time, and
+refuse to believe a green result until it has gone red first.
+
+solvercheck 58 -> 70. 11 suites green.

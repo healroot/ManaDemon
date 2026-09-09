@@ -12,6 +12,9 @@ local MD = dofile(here .. "/harness.lua"); arg[0] = a0
 local SM, SP, SV = MD.SimModel, MD.SimPlanner, MD.SimSolver
 local K = SM.K
 
+-- the shared scripted pull, so there is a real recording to classify against
+dofile(here .. "/fakepull.lua")(MD, _G.STUB)
+
 local ok, fails = 0, {}
 local function check(name, cond, detail)
     if cond then ok = ok + 1 else fails[#fails + 1] = name .. (detail and (" - " .. detail) or "") end
@@ -491,6 +494,83 @@ do
             return id and string.format("target %s, %s", tostring(tgt),
                 (MD.SpellData.spells[id] or {}).family or id) or "waited"
         end)())
+end
+
+--------------------------------------------------------------------------------
+-- 10. The classifier must survive a solver plan (v0.13.10)
+--
+-- SP.Classify labels recorded casts against a plan, and it read plan.rollStacks
+-- -- a THRESHOLD-RULES parameter the solver does not have. Since v0.13.7 the
+-- replay's chooser can hand it a solver plan, and it took the window down live
+-- with "attempt to compare nil with number".
+--------------------------------------------------------------------------------
+do
+    local rec = MD.FightRecorder:Get(1)
+    check("there is a recording to classify", rec ~= nil)
+    if rec then
+        for _, entry in ipairs(SP.STRATEGY_SET) do
+            local kit2 = MD.RankMath:SpellKit({ live = true })
+            local sc = SM.ScenarioFromRecording(rec, kit2)
+            local plan = SP.MakeStrategy(entry, SP.MaxRankBinds(), kit2,
+                { scenario = sc, seed = rec.id or 1 })
+            local okRun, err = pcall(SP.Classify, rec, sc, plan, kit2)
+            check("Classify survives " .. entry.key, okRun, tostring(err))
+        end
+        -- The exact shape that crashed live: control reaches the rollStacks
+        -- test only when the plan wants NOTHING at that cast (so every earlier
+        -- branch misses) and a Lifebloom is already rolling on the target. A
+        -- bare table with a Decide that returns nil is the minimal plan that
+        -- does it -- and it has no rollStacks at all, which is the point: the
+        -- classifier must not assume the fields of the threshold rules.
+        do
+            local kitX = MD.RankMath:SpellKit({ live = true })
+            local nothing = { Decide = function() return nil end,
+                              BindCount = function() return 0 end,
+                              Reset = function() end, binds = {}, kit = kitX }
+            -- the fixture casts Lifebloom once, so it never lands on a live
+            -- one. Roll it: four casts inside a single Lifebloom's seven
+            -- seconds, which is what the author's log had (stacks = 3).
+            local rec2 = {}
+            for k, v in pairs(rec) do rec2[k] = v end
+            rec2.ev = { t = {}, kind = {}, tgt = {}, amt = {}, x = {} }
+            for i = 1, rec.n do
+                rec2.ev.t[i], rec2.ev.kind[i] = rec.ev.t[i], rec.ev.kind[i]
+                rec2.ev.tgt[i], rec2.ev.amt[i], rec2.ev.x[i] =
+                    rec.ev.tgt[i], rec.ev.amt[i], rec.ev.x[i]
+            end
+            rec2.n = rec.n
+            local lb = SP.MaxRankBinds().Lifebloom
+            local last = rec.ev.t[rec.n] or 0
+            for i = 1, 4 do
+                rec2.n = rec2.n + 1
+                rec2.ev.t[rec2.n] = last + i * 1.5
+                rec2.ev.kind[rec2.n] = K.OWNCAST
+                rec2.ev.tgt[rec2.n], rec2.ev.amt[rec2.n], rec2.ev.x[rec2.n] = 1, 220, lb
+            end
+            rec2.dur = math.max(rec.dur or 0, last + 8)
+            local scX = SM.ScenarioFromRecording(rec2, kitX)
+            local okS, clsOrErr = pcall(SP.Classify, rec2, scX, nothing, kitX)
+            check("Classify survives a plan with no rollStacks at all",
+                okS, tostring(clsOrErr))
+            local labels = {}
+            for _, c in ipairs((okS and clsOrErr and clsOrErr.casts) or {}) do
+                labels[#labels + 1] = c.label
+            end
+            -- (a "stack" label would only appear for a plan that HAS a roll
+            -- target; the point here is that a plan without one does not crash)
+            check("...and it really did classify the casts", #labels >= 3,
+                string.format("%d cast(s): %s", #labels, table.concat(labels, ",")))
+        end
+
+        -- and the whole replay path, which is what actually broke
+        local kit2 = MD.RankMath:SpellKit({ live = true })
+        local sc = SM.ScenarioFromRecording(rec, kit2)
+        SP.plans[rec.id] = SP.MakeStrategy(SP.Strategy("solver-blind"),
+            SP.MaxRankBinds(), kit2, { scenario = sc, seed = rec.id or 1 })
+        local okRep, err2 = pcall(SP.Replay, rec, { dt = 0.25, force = true })
+        check("SP.Replay survives a solver plan", okRep, tostring(err2))
+        SP.plans[rec.id] = nil
+    end
 end
 
 print(string.format("\n%d ok, %d failed", ok, #fails))
