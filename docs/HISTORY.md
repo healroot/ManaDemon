@@ -2895,3 +2895,52 @@ scenario's target table -- its own piece of work, queued as v0.14.2 with the in-
 strategy redraw.
 
 12 suites green.
+
+## 2026-09-10 — v0.14.2/.3: two HoT bugs worth a third of a druid's healing
+
+The session began by documenting what was outstanding and planning v0.14.x (`docs/PLAN.md`
+Phase 1.15). The first item was the one blocking everything above it: the engine generated
+42-70% of the healing a recording said happened, from the identical script.
+
+`tools/reproduce.lua` grew a per-family breakdown, and the single number split into three:
+
+```
+family          log      engine   share
+?             44946           0      0%
+Lifebloom    166094       81182     49%
+Regrowth      49944       26387     53%
+Rejuvenation  27366       11868     43%
+Swiftmend     13185           0      0%
+```
+
+**The "?" was spell 33778** — Lifebloom's bloom is a *different spell id* from its HoT
+(33763), so a fifth of all the Lifebloom in the fight was credited to nothing. `SD.alias` and
+`SD:Resolve(id)` fix the attribution at every heal-attribution site; they are aliases rather
+than rows in `SD.spells`, because a second rank-1 Lifebloom would enter `SD.all` and corrupt
+the known-rank index that decides which rank the dashboard suggests.
+
+**Then two real engine bugs**, both found by micro-testing one cast at a time (a single
+Lifebloom reproduced at ratio 1.00, two at 0.82, four rolling at **0.55**):
+
+- The bloom landed `st.bloom` where the ticks beside it land `st.tick * st.stacks`. A rolled
+  Lifebloom therefore under-healed by up to twice its bloom. The log agrees it scales: blooms
+  there range 1653-3477 against a flat 528 tick, and a 2.1x spread in one spell's direct heal
+  is stack scaling.
+- **A refresh restarted the tick timer.** TBC's periodic effect keeps its own cadence across
+  a refresh; re-anchoring `nextTick` pushed the next tick back by however far into the
+  interval the refresh landed. On a Lifebloom rolled every 1.5s against a 1s tick that is two
+  ticks in three -- and 67% was exactly the share of the log's tick count the parse
+  reproduced. `>=` rather than `>` on the boundary test, because rolling a HoT on the global
+  cooldown lands on a tick boundary constantly.
+
+Result, on the author's own recordings: **47/52/70/42% -> 58/66/74/48%**. Swiftmend went 0%
+to 13% once its HoTs existed to consume, confirming it was downstream.
+
+**Not closed, and said plainly**: a raid parse still reproduces 255 of the log's 366 ticks.
+The next measurements are queued as v0.14.4 -- which targets the missing ticks belong to (the
+scenario tracks 8 of that parse's 10 players, so casts on the other two land nowhere), and
+whether the cast times leave room for 82 casts in 129 seconds.
+
+Both fixes were written test-first and each was checked against the unfixed engine: 4b
+reported "3 stacks heal 1217 more than 1" (the extra tick stacks, no extra blooms) and 4c
+"10 ticks, expected 11". simcheck 10 -> 12 self-tests. 12 suites green.

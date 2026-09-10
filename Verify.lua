@@ -1049,6 +1049,49 @@ function MD:RunSimRun()
                                              { 1, lifebloomID, e.cost, 1 },
                                              { 2, lifebloomID, e.cost, 1 } }))
         Check("4 lifebloom blooms once", r.blooms == 1, string.format("%d bloom(s)", r.blooms))
+
+        -- v0.14.2: and it blooms for the STACK, not for one application. The
+        -- ticks beside it are `st.tick * st.stacks`; the bloom was not, so
+        -- rolling Lifebloom under-healed by up to twice the bloom -- and
+        -- Lifebloom is about 70% of a resto druid's healing.
+        -- SM:Run hands back a POOLED result table, so read the totals out
+        -- before starting the next run (the trap that made v0.13.0's first
+        -- comparison report five perfect ties)
+        local function totalOf(casts)
+            local rr = SM:Run({ dur = 25, pool = 50000, initial = { mana = 50000, form = "caster" },
+                                targets = SimTargets(1, BIG, 1), kit = kit },
+                              SM.ScriptPlan(casts))
+            return (rr.healed or 0) + (rr.overhealed or 0)
+        end
+        local t1 = totalOf({ { 0, lifebloomID, e.cost, 1 } })
+        local t3 = totalOf({ { 0, lifebloomID, e.cost, 1 },
+                             { 1, lifebloomID, e.cost, 1 },
+                             { 2, lifebloomID, e.cost, 1 } })
+        -- three stacks add two more blooms; the extra tick stacks alone cannot
+        -- account for that much (7 * tick * 2 is well under 2 * bloom on any kit
+        -- where the bloom is the larger half, which it is at every rank)
+        -- v0.14.2: refreshing a HoT must NOT push the next tick back. TBC's
+        -- periodic timer keeps its own cadence across a refresh; ours restarted
+        -- it, so a Lifebloom rolled every 1.5s against a 1s tick fired two
+        -- ticks in three -- which is exactly the 67% of the log's tick count a
+        -- real parse reproduced (tools/reproduce.lua).
+        local rolled = SM:Run({ dur = 12, pool = 50000, initial = { mana = 50000, form = "caster" },
+                                targets = SimTargets(1, BIG, 1), kit = kit },
+                              SM.ScriptPlan({ { 0, lifebloomID, e.cost, 1 },
+                                              { 1.5, lifebloomID, e.cost, 1 },
+                                              { 3.0, lifebloomID, e.cost, 1 },
+                                              { 4.5, lifebloomID, e.cost, 1 } }))
+        -- covered from t=0 to t=11.5 at one tick a second
+        -- ticks at 1,2,3,4 then seven more from the last refresh = 11. Resetting
+        -- the timer on every refresh loses one of them.
+        Check("4c a refresh does not delay the next tick", (rolled.ticks or 0) >= 11,
+            string.format("%d ticks over 11.5s of 1s-period Lifebloom, expected 11",
+                rolled.ticks or 0))
+
+        Check("4b lifebloom blooms for the whole stack",
+            (t3 - t1) > 1.5 * (e.bloom or 0),
+            string.format("3 stacks heal %.0f more than 1; two extra blooms would be %.0f",
+                t3 - t1, 2 * (e.bloom or 0)))
     end
 
     -- 5. Swiftmend eats Regrowth before Rejuvenation

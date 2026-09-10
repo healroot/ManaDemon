@@ -73,7 +73,7 @@ end
 -- combat log's critical flag; kind is "tick" | "direct" | "bloom".
 function CAL:Observe(spellID, kind, amount, crit, destGUID)
     if not CAL.data or not spellID or not amount or amount <= 0 then return end
-    local s = MD.SpellData and MD.SpellData.spells[spellID]
+    local s = MD.SpellData and MD.SpellData.spells[MD.SpellData:Resolve(spellID)]
     if not s then return end
     if GetTime() - lastFormChange < FORM_GRACE then
         CAL.data.skippedForm = (CAL.data.skippedForm or 0) + 1
@@ -135,7 +135,7 @@ function CAL:CheckDrift(spellID, kind, st)
     if math.abs(ratio - 1) > ALERT_REL and not alerted[key]
         and not (MD.db and MD.db.calibAlerts == false) then
         alerted[key] = true
-        local s = MD.SpellData.spells[spellID]
+        local s = MD.SpellData.spells[MD.SpellData:Resolve(spellID)]
         local msg = string.format("|cffffcc00calibration:|r %s R%d %s is healing %.1f%% %s the model over %d events.",
             GetSpellInfo(spellID) or "?", s and s.rank or 0, kind, math.abs(ratio - 1) * 100,
             ratio > 1 and "above" or "below", st.n)
@@ -155,7 +155,7 @@ end
 function CAL:RelicHint(spellID, kind, st)
     local SD = MD.SpellData
     local relic, itemID, itemName = SD:Relic()
-    local s = SD.spells[spellID]
+    local s = SD.spells[SD:Resolve(spellID)]
     if not s then return "" end
     if not relic then
         if itemID then

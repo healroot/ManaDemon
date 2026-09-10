@@ -85,7 +85,9 @@ for key, c in pairs(realDB.char or {}) do
         local kit = Calibrate(MD.RankMath:SpellKit({ live = true }), key)
         local sc = SM.ScenarioFromRecording(rec, kit)
         if sc then
-            local r = SM:Run(sc, nil, { critMode = "ev" })
+            local fired = 0
+            local r = SM:Run(sc, nil, { critMode = "ev",
+                onCast = function() fired = fired + 1 end })
             local logOwn = 0
             for i = 1, (rec.n or 0) do
                 local k2 = rec.ev.kind[i]
@@ -96,6 +98,44 @@ for key, c in pairs(realDB.char or {}) do
                 string.sub(tostring(rec.zone), 1, 30), logOwn, eng,
                 logOwn > 0 and 100 * eng / logOwn or 0,
                 #(rec.deaths or {}), r.deaths and r.deaths.n or 0))
+            -- per family, which is what says WHERE the healing went missing
+            local SDm = MD.SpellData
+            local logFam = {}
+            for i = 1, (rec.n or 0) do
+                local k2 = rec.ev.kind[i]
+                if k2 == K.OWNHEAL or k2 == K.OWNTICK then
+                    local id = SDm:Resolve((rec.ev.x[i] or 0) % 100000)   -- crit flag off, bloom aliased
+                    local sd = SDm.spells[id]
+                    local fam = sd and sd.family or "?"
+                    logFam[fam] = (logFam[fam] or 0) + (rec.ev.amt[i] or 0)
+                end
+            end
+            -- tick COUNT against the log's heal-event count: it says whether
+            -- the engine heals too little per tick or too seldom
+            local logTicks, logDirect = 0, 0
+            for i = 1, (rec.n or 0) do
+                local k2 = rec.ev.kind[i]
+                if k2 == K.OWNTICK then logTicks = logTicks + 1
+                elseif k2 == K.OWNHEAL then logDirect = logDirect + 1 end
+            end
+            print(string.format("    %-24s %9d %9d %6.0f%%", "casts executed",
+                rec.ownCasts or 0, fired,
+                (rec.ownCasts or 0) > 0 and 100 * fired / rec.ownCasts or 0))
+            print(string.format("    %-24s %9s %9s", "heal events",
+                string.format("%d+%d", logTicks, logDirect),
+                string.format("%d+%d", r.ticks or 0, r.blooms or 0)))
+            local fams = {}
+            for fam in pairs(logFam) do fams[#fams + 1] = fam end
+            for fam in pairs(r.healByFamily or {}) do
+                if not logFam[fam] then fams[#fams + 1] = fam end
+            end
+            table.sort(fams)
+            for _, fam in ipairs(fams) do
+                local lg = logFam[fam] or 0
+                local en = (r.healByFamily[fam] or 0) + ((r.ohByFamily or {})[fam] or 0)
+                print(string.format("    %-24s %9d %9d %6s", fam, lg, en,
+                    lg > 0 and string.format("%.0f%%", 100 * en / lg) or "-"))
+            end
         end
     end
 end

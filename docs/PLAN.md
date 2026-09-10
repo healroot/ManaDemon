@@ -258,47 +258,58 @@ read only what a human can see.
   `AtRisk` treating being under the danger line as a fact rather than a forecast.
   *(2026-09-09; the control showed the raid fight's death belongs to the engine, which
   retracts v0.13.4's "the rules edge the solver on raids".)*
-- [ ] **v0.13.6** (now the real blocker) the engine generates **42-70% of the recorded
-  healing** from the identical script, on level 64 fights with verified spell data as well as
-  on level 70 raids with the kit calibrated to the log. Measured by `tools/reproduce.lua`.
-  Lifebloom is 70% of the healing and the evidence points at the HoT lifecycle -- ticks
-  surviving a refresh, and how many HoTs roll at once -- not at spell values.
-- [x] **v0.13.7** the run watched end to end, part one: `RR:SampleHealth` records the
-  party's health across the whole run (gaps included) so a continuous replay has bars to
-  draw; the replay's strategy chooser lists the planners (`SP.STRATEGY_SET`) and not only
-  the last search's objectives; `tools/import.lua gates --run K` validates a whole run at
-  once. *(2026-09-09.)*
-- [x] **v0.13.8** `CoachRun` gives its plan to every pull, so a coached run actually draws
-  a suggested column; `/md coachrun N force` for the pulls that do not replay.
-  *(2026-09-09; it was writing only `SP.runPlans`, so the answer was 0 of 36.)*
-- [x] **v0.13.9** one command: opening a replay coaches it, so validate/coach/play collapses
-  into `/md replay N`. A fight that does not replay still is not coached silently -- the hint
-  names the failing gate and the `force` spelling -- and an explicit Coach cancels the
-  automatic one. `db.replayAutoCoach`. *(2026-09-09.)*
-- [x] **v0.13.10** live crash: `SP.Classify` read `plan.rollStacks`, a threshold-rules
-  field the solver does not have, so picking a solver in the replay's chooser took the
-  window down. *(2026-09-09; the regression test needed three attempts -- the first eight
-  assertions passed vacuously on a wrong call signature.)*
-- [x] **v0.14.0a** `Engine/RunTimeline.lua`: the run's clock as a pure model, with
-  `tools/timeline.lua` (27 assertions). *(2026-09-09; the real Underbog run builds into 72
-  segments, 36 pulls and 36 gaps, 51% of it gap.)*
-- [x] **v0.14.1** run mode in the window: `/md replay run N` plays the dungeon end to end,
-  gaps included, on the run's clock. *(2026-09-09; replayui 87 -> 98.)*
-- [ ] **v0.14.2** one set of frames for the whole run (no rebuild at a pull boundary), the
-  run strip as the scrubber's cursor, and changing strategy redrawing in place. The
-  remaining half of: the run's clock, not the pull's, with a gap
-  state driven from `run.hp` / `run.mana` and the run strip as its scrubber
-  (`docs/SPEC-v0.13.md` §16.2). Runs recorded before v0.13.7 have no gap health. **Seamless
-  is the requirement**: no reopening between pulls, and changing the strategy must redraw the
-  suggested column in place rather than rebuild the window (`RebuildSuggested` currently calls
-  `OpenReplay`, which is why it flickers).
-- [ ] **v0.13.9** the solver's reasons in the replay and on the card -- it knows the
-  number it decided on, so the sentence can name it.
-- [ ] **v0.13.4** `SP.Search` over `minValue`/`horizon`, the four strategy objectives
-  reading the solver's pool, and the Review tab able to pick which planner coached.
-- [ ] **v0.13.8** correct the `-- VERIFY` heal values in `Data/SpellData.lua` from the
+## Phase 1.15 — v0.14.x: make the replay tell the truth
+
+The numbering below replaces the leftovers from earlier renames. Ordered by what unblocks
+what: nothing above the engine is worth tuning while the engine heals half as much as the
+log says it did.
+
+- [x] **v0.14.2 — two HoT bugs.** *(2026-09-10.)* (a) Lifebloom's bloom did not scale with its stacks. `Land(a, st.bloom, ...)`
+  in `SimModel`'s expiry, where the ticks beside it are `st.tick * st.stacks`. Rolling
+  Lifebloom therefore under-heals by up to 2x the bloom, and Lifebloom is 70% of a resto
+  druid's healing. Measured: one cast reproduces exactly (ratio 1.00), two 0.82, four rolling
+  **0.55**. `SV.Deposits` already assumed the bloom scales, so the solver was planning for
+  healing the engine never delivered. (b) **A refresh restarted the tick timer.** TBC's
+  periodic effect keeps its own cadence across a refresh; ours re-anchored `nextTick`, so a
+  Lifebloom rolled every 1.5s against a 1s tick fired two ticks in three. Together they take
+  the author's own recordings from 47/52/70/42% of the recorded healing to **58/66/74/48%**.
+  Not closed: ticks are still 255 of the log's 366 on a raid parse, and the rest is
+  `v0.14.4`.
+- [x] **v0.14.3 — the bloom is a second spell id.** *(2026-09-10; `SD.alias` + `SD:Resolve`, used at every heal-attribution site. Not a row in `SD.spells`, which would corrupt the known-rank index.)* 33778 is Lifebloom's bloom and 33763 the
+  HoT; `Data/SpellData.lua` knows only 33763, so **44,946 healing on one parse is attributed
+  to nothing at all**. Needs an alias rather than a second rank-1 row, which would corrupt
+  the known-rank index.
+- [ ] **v0.14.4 — the rest of the reproduction gap.** After v0.14.2 a raid parse reproduces
+  255 of the log's 366 ticks (70%) and 47% of its healing; the author's own fights are at
+  48-74%. Swiftmend went 0 -> 13% once its HoTs were there, so it was downstream as
+  suspected, but 13% is still not right. Next measurements: which targets the missing ticks
+  belong to (the scenario tracks 8 of 10 players on that parse, so casts on the other two
+  land nowhere), and whether cast times leave room for 82 casts in 129s.
+- [ ] **v0.14.5 — one set of frames for the whole run.** Playback no longer stops at a pull
+  boundary (v0.14.1) but `RunSeek` reaches the next pull through `OpenReplay`, which re-lays
+  the window out. Needs rows built once from `RT.Roster` with each pull's roster mapped on by
+  name; `PaintFrame` is 190 lines bound to the trace and the scenario's target table. Carries
+  the run strip as the scrubber's cursor and the in-place strategy redraw
+  (`RebuildSuggested` still calls `OpenReplay`).
+- [ ] **v0.14.6 — the solver's reasons in the replay and on the card.** It decided on a
+  number; the sentence can name it. `SV.ReasonText` exists and is wired into `SP.ReasonText`,
+  but the card's `why` section and the strip still assume a rules plan.
+- [ ] **v0.14.7 — correct the `-- VERIFY` heal values** in `Data/SpellData.lua` from the
   Warcraft Logs corpus (`tools/wclcheckkit.lua` measures the error; Rejuvenation R13 and
-  Regrowth R10 are 1.6-1.8x out), then re-run the comparison on the level 70 imports.
+  Regrowth R10 read 1.6-1.8x low), then re-run every comparison on the level 70 imports.
+- [ ] **v0.14.8 — `SP.Search` over the solver's parameters** (`minValue`, `horizon`), the four
+  strategy objectives reading the solver's pool, and the Review tab able to say which planner
+  coached a fight.
+
+Known and deliberately not fixed:
+
+- `sag` (the convex deficit weighting, v0.13.5) is **measured inert** and ships at 0. It stays
+  because it encodes a stated preference, not because it has been shown to help.
+- Runs recorded before v0.13.7 have no gap health; a continuous replay of one holds the last
+  pull's bars. That is data, not code.
+- "Rules: HoTs only" scores identically to "Rules: balanced" on the author's fights. Believed
+  to be because nobody drops below the 45% direct-heal line there, so rule 2 never fires --
+  worth confirming on a harder fight before trusting that row.
 
 ## Phase 2 — other classes (after 1 is green)
 

@@ -423,7 +423,18 @@ function SM:Run(scenario, plan, opts)
         else
             st.ticksLeft = e.ticks or 0
         end
-        st.nextTick = t + st.tickPeriod
+        -- v0.14.2: a refresh extends a HoT; it does NOT restart its tick timer.
+        -- The periodic effect keeps its own cadence in TBC, so re-anchoring
+        -- nextTick here pushed the next tick back by however far into the
+        -- interval the refresh landed. On a Lifebloom rolled every 1.5s against
+        -- a 1s tick that is two ticks in three -- and 67% is exactly the share
+        -- of the log's tick count a real parse reproduced.
+        -- `>=`, not `>`: a refresh landing exactly on a tick boundary would
+        -- otherwise re-anchor and swallow that tick, and rolling a HoT on the
+        -- global cooldown lands on the boundary constantly.
+        if not (wasActive and st.nextTick and st.nextTick >= t) then
+            st.nextTick = t + st.tickPeriod
+        end
         st.expires = t + (e.duration or (st.ticksLeft * st.tickPeriod))
         ScheduleHot(ti, fi, st)
         Trace(TK.HOT, ti, fi, st.stacks)
@@ -771,7 +782,17 @@ function SM:Run(scenario, plan, opts)
                 if st and st.active and st.gen == aux then
                     local bloomed = 0
                     if b == HOT_INDEX.Lifebloom and st.bloom > 0 and not S.dead[a] then
-                        Land(a, st.bloom, st.family or "Lifebloom")
+                        -- v0.14.2: the bloom is the STACK's, exactly as the ticks
+                        -- beside it are `st.tick * st.stacks`. Landing one
+                        -- application's worth made every rolled Lifebloom
+                        -- under-heal by up to twice the bloom, and Lifebloom is
+                        -- around 70% of a resto druid's healing -- which is most
+                        -- of why a recording only reproduced 42-70% of the
+                        -- healing the log recorded (tools/reproduce.lua).
+                        -- The log agrees: blooms there range 1653-3477 against a
+                        -- flat 528 tick, and a 2.1x spread in one spell's direct
+                        -- heal is stack scaling.
+                        Land(a, st.bloom * (st.stacks or 1), st.family or "Lifebloom")
                         bloomCount = bloomCount + 1
                         bloomed = 1
                     end

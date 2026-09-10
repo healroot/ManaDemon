@@ -223,6 +223,25 @@ end
 --------------------------------------------------------------------------------
 SD.known = {}     -- family -> sorted array of known spellIDs (ascending rank)
 SD.knownSet = {}  -- spellID -> true for known spells
+-- v0.14.3: some heals arrive under a DIFFERENT spell id from the one that was
+-- cast. Lifebloom's final heal is 33778 while the HoT that ticked is 33763, so a
+-- combat log attributes the bloom to a spell this table has never heard of -- on
+-- one Prince Malchezaar parse that is 44,946 healing, a fifth of all the
+-- Lifebloom in the fight, credited to nothing at all.
+--
+-- These are aliases and NOT rows in SD.spells: a second entry with the same
+-- family and rank would enter SD.all and corrupt the known-rank index, which is
+-- what decides which rank the dashboard suggests.
+SD.alias = {
+    [33778] = 33763,    -- Lifebloom's bloom -> the Lifebloom that bloomed
+}
+
+-- The id to attribute a heal to. Always use this on an id that came out of a
+-- combat log or a recording; a CAST id never needs it.
+function SD:Resolve(id)
+    return SD.alias[id] or id
+end
+
 SD.maxRank = {}   -- family -> highest known spellID
 
 -- Static family -> sorted array of ALL spellIDs (built once at load; the

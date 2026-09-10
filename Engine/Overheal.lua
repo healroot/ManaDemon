@@ -144,7 +144,7 @@ function OH:Record(spellID, kind, amount, overheal, destGUID, destName)
     local over = gross - effective
     kind = kind or "direct"
 
-    local s = MD.SpellData and MD.SpellData.spells[spellID]
+    local s = MD.SpellData and MD.SpellData.spells[MD.SpellData:Resolve(spellID)]
     local t = MD.Targets and MD.Targets:Lookup(destGUID, destName)
     local role = t and t.role or "UNKNOWN"
     local class = t and t.class or "UNKNOWN"
@@ -201,7 +201,7 @@ end
 function OH:Fraction(spellID)
     local frac, n = FractionIn(OH.stats, "s:" .. spellID)
     if frac then return frac, n, "rank" end
-    local s = MD.SpellData and MD.SpellData.spells[spellID]
+    local s = MD.SpellData and MD.SpellData.spells[MD.SpellData:Resolve(spellID)]
     if s then
         frac, n = FractionIn(OH.stats, "f:" .. s.family)
         if frac then return frac, n, "family" end
