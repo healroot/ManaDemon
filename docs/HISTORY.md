@@ -2996,3 +2996,74 @@ that, which is why those two still read 64% and 40%.
 All twelve suites green (simcheck 12 self-tests, reccheck 53, replaycheck 80, replayui 98,
 runcheck 78, reviewui 44, navui 25, dashui 54, regencheck 27, simwindow 8, solvercheck 70,
 timeline 27).
+
+---
+
+## 2026-09-11 — v0.14.7: the heal values were right; two readers of them were not
+
+**What the plan said to do:** correct the `-- VERIFY` heal values in `Data/SpellData.lua`
+from the Warcraft Logs corpus. Nothing in that table needed correcting. The two numbers that
+did were in the tools that read it.
+
+**The recorder wrote every own heal down twice over.** `Engine/FightRecorder.lua` had
+`local _, gross = MD.Overheal and MD.Overheal:Split(amount, overheal)` — an `and` expression,
+so it truncates to one value, so `gross` was always nil and the fallback `amount + overheal`
+always ran. This client reports `amount` **gross**, so every recording ever made carries
+heal + overheal: 1.0x the truth where nothing was wasted, 2.0x where everything was. That is
+the entire "uncalibrated 46-68%" figure quoted since v0.14.4 — the *log* column was inflated,
+not the engine column. Third occurrence of the trap named at the top of `CLAUDE.md`, and the
+first outside `UI/Summary.lua`.
+
+It was found by looking at the events one at a time instead of in a total: bucket every own
+heal by spell and kind and the buckets run from the model's value to exactly twice it, with
+the one bucket that sits *on* the model (a Lifebloom ticking at 1 stack on a tank who is
+taking damage: min 78, model 78) being the one whose events wasted nothing. That diagnostic
+is now `tools/healcheck.lua`.
+
+Test-first: `tools/fakepull.lua`'s in-combat tick was a clean one (400, 0), which is how the
+bug lived through every suite; it now wastes 150 of its 400 and `tools/reccheck.lua` asserts
+the recorded amount is 400. It reported 550 against the unfixed recorder.
+
+The overheal was never stored separately, so a v1 stream **cannot be un-mixed**. The
+recordings on disk stay exact about *when* and *what* and inflated about *how much*; the
+stream carries `v = 2` now and `reproduce.lua` / `healcheck.lua` flag a v1 rather than quoting
+a magnitude from it.
+
+**The importer read the log's `spellPower` as +healing.** In a TBC log that field is spell
+damage; healing gear is itemised at roughly +88 healing per +31 damage, so every imported raid
+healer was being run at about a third of their real power — the whole of "Rejuvenation R13 and
+Regrowth R10 read 1.6-1.8x low". The factor is measured, not looked up: `wclcheckkit.lua
+--fit` solves each parse for the +healing that makes the model reproduce the log **one row at
+a time**, and the rows agree — on Ghnoy's Nightbane parse a Rejuvenation tick asks for +2000,
+a Lifebloom bloom +2040, a Regrowth tick +2045, a Lifebloom tick +2105. Over 17 parses,
+implied/spellPower is min 2.66, **median 3.08**, max 3.46; `SPELLPOWER_TO_HEALING = 3.08`.
+
+**Results.** The Malchezaar control reproduces **95% with no calibration at all** (the
+observed table is now worth one point, 95 -> 96 — which is what it should be worth when the
+spell data is right). `wclcheckkit` reads 0.93-0.97 on the two Nightbane parses where it read
+1.46-1.82. Tranquility's heal ids are aliased (26983 -> 44208, 9863 -> 44207, measured by
+pairing caster with healer), so 43,104 healing stops landing in family `?`. The
+`-- VERIFY` marks come off Rejuvenation R13 and Regrowth R10; Healing Touch R12/R13 keep
+theirs because nobody in the corpus casts one. No heal value changed.
+
+**Two open leads written down and deliberately not acted on.** Regrowth's *direct* asks for
+~28% more +healing than the other four families on every parse that has the row — the model
+reads it about 13% low — while the HoT half of the same hybrid split agrees with Rejuvenation
+and Lifebloom; a measurement without a mechanism is not a licence to edit frozen data. And
+the bottom-cluster heuristic for a 1-stack Lifebloom tick fails on 6 of 17 parses, the same
+corpus question as the per-stack spread in §4b.
+
+Re-run on the corrected corpus, the threshold rules still beat the solver on the raid parses
+(116 deaths / 3432s floor / 668k mana against 167 / 3875 / 756k; it was 140/3967/745k against
+181/3970/803k at the old healing) and the solver still spends **44% less** on the author's own
+5-man recordings at equal deaths and floor seconds. The correction moved both and flipped
+neither.
+
+All twelve suites green (reccheck 53 -> 54). Files: `Engine/FightRecorder.lua`,
+`Data/SpellData.lua`, `tools/wclconvert.py`, `tools/wclcheckkit.lua` (rewritten, `--fit`),
+`tools/healcheck.lua` (new), `tools/reproduce.lua`, `tools/fakepull.lua`,
+`tools/reccheck.lua`, `docs/SPEC-v0.14.md` §4c, `docs/PLAN.md`, `docs/TOOLS.md`, `CLAUDE.md`,
+`ManaDemon.toc` (0.14.7).
+
+**Next:** v0.14.5 (one set of frames for the whole run) and v0.14.6 (the solver's reasons in
+the replay and on the card) are still open, as is v0.14.8.

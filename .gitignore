@@ -9,3 +9,4 @@ tools/.lua/
 *.key
 *.secret
 wcl.json
+tools/__pycache__/

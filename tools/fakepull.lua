@@ -75,7 +75,12 @@ advance(0.5); castStart(regrowth, "Tank-1", "Destroyka")
 advance(2.0); cast(regrowth, "Tank-1", "Destroyka"); S.mana = S.mana - (SD:GetCost(regrowth) or 0)
 advance(1.5); cast(rejuv, "Tank-1", "Destroyka");    S.mana = S.mana - (SD:GetCost(rejuv) or 0)
 advance(1.5); cast(MOTW, PLAYER, "Penek");           S.mana = S.mana - 445
-advance(3.0); ownTick(rejuv, "Tank-1", "Destroyka", 400, 0)
+-- 400 gross of which 150 was wasted: on this client `amount` ALREADY
+-- includes the overheal, so the recorder must write down 400. Every own
+-- tick in this fixture used to be a clean one, which is how v0.14.7's bug
+-- (a truncated multi-return that always added the overheal back on) lived
+-- through every suite.
+advance(3.0); ownTick(rejuv, "Tank-1", "Destroyka", 400, 150)
 S.units.party2.hp = 1000
 swing("Mage-1", "Alkandari", 3000)
 aura("SPELL_AURA_APPLIED", "Mob-1", "Mage-1", "Alkandari", 55555, "Curse of Weakness", "DEBUFF")

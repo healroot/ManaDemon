@@ -179,7 +179,12 @@ function FR:Start(t0)
     -- have not been healed yet, and BuildRoster snapshots that list.
     local trackedSet = BuildTracked()
     local stream = {
-        v = 1, id = time(), zone = GetRealZoneText and GetRealZoneText() or nil,
+        -- v: the stream's own schema. 2 (v0.14.7) is the first version whose
+        -- own-heal amounts are gross ONCE; every v1 stream on disk carries
+        -- heal + overheal and cannot be un-mixed, because the overheal was
+        -- never written down separately. Read by tools/healcheck.lua and
+        -- tools/reproduce.lua, which say so rather than quoting a magnitude.
+        v = 2, id = time(), zone = GetRealZoneText and GetRealZoneText() or nil,
         t0 = t0, dur = 0, pool = UnitPowerMax("player", 0) or 0,
         roster = BuildRoster(), trackedSet = trackedSet,
         ev = { t = {}, kind = {}, tgt = {}, amt = {}, x = {} },
@@ -362,7 +367,18 @@ function FR:Event(subevent, sourceGUID, destGUID, destName, p1, p2, p3, p4, p5, 
         local spellID, amount, overheal, critical = p1, p4 or 0, p5 or 0, p7
         local periodic = (subevent == "SPELL_PERIODIC_HEAL")
         if isOwn then
-            local _, gross = MD.Overheal and MD.Overheal:Split(amount, overheal)
+            -- THE MULTI-RETURN TRAP, third time (CLAUDE.md names the two in
+            -- UI/Summary.lua). `MD.Overheal and MD.Overheal:Split(a, o)` is an
+            -- `and` expression, so it truncates to ONE value: `gross` was always
+            -- nil and the fallback always ran. On this client `amount` already
+            -- includes the overheal, so every own heal in every recording was
+            -- written down as heal + overheal -- up to 2x the truth. Write the
+            -- `if` out.
+            local gross
+            if MD.Overheal then
+                local _
+                _, gross = MD.Overheal:Split(amount, overheal)
+            end
             if not gross then gross = amount + overheal end
             Push(s, t, periodic and K.OWNTICK or K.OWNHEAL, idx, gross,
                 (spellID or 0) + (critical and CRIT_FLAG or 0))

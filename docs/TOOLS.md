@@ -76,11 +76,15 @@ generates from them, split per family and per heal event, with the cast count an
 beside it. Run this before believing any comparison.
 
 With an `observed.lua` the kit is first scaled to what the log says each spell healed, so
-spell values are removed from the question and what is left is the engine alone. On that
-footing the Malchezaar parse reads **95%** (v0.14.4; it was 47%, and it used to kill a tank
-nobody lost). Without one it reads **46-68%**, and that whole residue is `Data/SpellData.lua`
-— the heal *events* reproduce one for one (41/43, 94/94, 28/28, 7/7 on the author's fights),
-so what is wrong is the size of each heal, not when it lands. See `docs/SPEC-v0.14.md` §4b.
+spell values are removed from the question and what is left is the engine alone.
+
+Since **v0.14.7** the Malchezaar control reads **95% with no calibration at all**, and the
+observed table is worth one point on top of that (95 -> 96) — which is what it should be
+worth once the spell data is right. Per family, uncalibrated: Lifebloom 90%, Regrowth 87%,
+Rejuvenation 103%, Swiftmend 67%. The old "uncalibrated 46-68%" was not the spell data: the
+recorder was writing every own heal down as heal + overheal, so the **log** column was
+inflated, not the engine column. A stream recorded before v0.14.7 (`v = 1`) is flagged in the
+output and its share is not a statement about the engine. See `docs/SPEC-v0.14.md` §4b, §4c.
 
 The `observed.lua` beside it is written by `wclrules.py --observed`:
 
@@ -88,6 +92,25 @@ The `observed.lua` beside it is written by `wclrules.py --observed`:
 python3 tools/wclrules.py .logs/wcl/waFx9B1kNQJWP3hq-103.json \
         --healer Samwellx --observed .logs/wcl-holdout-observed.lua
 ```
+
+### `healcheck.lua` — this character's own heals against the model
+
+```bash
+bash tools/run.sh tools/healcheck.lua            # finds the SavedVariables the way import.lua does
+bash tools/run.sh tools/healcheck.lua .logs/ManaDemon.lua
+```
+
+The client-side twin of `wclcheckkit.lua`: every own heal event in every recording, bucketed
+by spell and kind, against what the model says that spell heals — with the **profile the
+client itself wrote down**, so it is the one fully trusted calibration in the project.
+
+Read it by the **minimum** column. A recorded amount is gross, so a bucket should be one
+value; anything above its own minimum is overheal that should not be there. That is how
+v0.14.7's recorder bug was found, and it is how the author confirms the fix: on the next
+dungeon every bucket should sit on the model and stop running to twice it.
+
+Lifebloom's tick is per-stack, so its bucket is three overlapping ones (1x / 2x / 3x a base);
+the 1-stack cluster is printed separately.
 
 ### `solvercmp.lua` — the solver against the threshold rules
 
@@ -125,6 +148,11 @@ python3 tools/wclconvert.py .logs/wcl/bdByCxDv6rVQhRMf-145.json --healer Blohz \
                             --out .logs/wcl-records.lua
 ```
 
+**v0.14.7:** the `spellPower` a TBC log carries is the character sheet's **spell damage**, not
++healing, and the converter now scales it by `SPELLPOWER_TO_HEALING = 3.08` (measured by
+`wclcheckkit.lua --fit` over 17 parses: min 2.66, median 3.08, max 3.46). Regenerate any
+corpus converted before v0.14.7 — the healers in it are running at a third of their power.
+
 `wclconvert.py` writes **two** files: `<out>.lua` (a SavedVariables-shaped database for the
 offline tools) and `<out>-append.lua` (a block to paste at the end of the game's
 `ManaDemon.lua` with the client closed, to replay the fights in-game — deleting the block is
@@ -136,6 +164,9 @@ python3 tools/wclrules.py .logs/wcl/bdByCxDv6rVQhRMf-145.json --healer Blohz
 
 # 4. what our model says a spell heals, against what the log says it DID
 bash tools/run.sh tools/wclcheckkit.lua
+#    ...and the other direction: solve each parse for the +healing that reproduces
+#    it, one row at a time. Four families agreeing is what verifies Data/SpellData.lua.
+bash tools/run.sh tools/wclcheckkit.lua .logs/wcl-records.lua .logs/wcl-observed.lua --fit
 
 # 5. merge many imported fights into the shipped prior
 bash tools/run.sh tools/buildintuition.lua .logs/wcl-all.lua

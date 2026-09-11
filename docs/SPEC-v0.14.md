@@ -124,6 +124,93 @@ a refresh (Lifebloom re-snapshots at each application, so a proc falling off dro
 picks the bottom cluster and under-feeds most of the fight. A 2.7x spread is larger than any
 proc explains and is an open question about the corpus, not about `Engine/SimModel.lua`.
 
+## 4c. v0.14.7 — the heal values were right; two readers of them were not
+
+v0.14.4 left one thing standing: an *uncalibrated* recording reproduced only 46-68% of its
+healing, and the plan blamed the `-- VERIFY` rows in `Data/SpellData.lua`. It was not them.
+
+**The recorder wrote every own heal down twice over.** `Engine/FightRecorder.lua` had
+
+```lua
+local _, gross = MD.Overheal and MD.Overheal:Split(amount, overheal)
+if not gross then gross = amount + overheal end
+```
+
+`a and f()` is an `and` expression, so it truncates `f()` to **one** value: `gross` was always
+nil and the fallback always ran. This client reports `amount` **gross** (the overheal
+included, latched by `Engine/Overheal.lua` and stored as `db.healAmountGross`), so every own
+heal in every recording ever made was stored as *heal + overheal* — 1.0x the truth on a heal
+that wasted nothing, 2.0x on one that wasted everything. This is the third time the trap
+named at the top of `CLAUDE.md` has bitten, and the first time outside `UI/Summary.lua`.
+
+It is visible the moment the events are looked at one at a time instead of in a total
+(`tools/healcheck.lua`, written for this):
+
+| spell | n | min | median | max | model |
+|---|---|---|---|---|---|
+| Rejuvenation R12 tick | 26 | 465 | 828 | 830 | 393 |
+| Lifebloom R1 tick, 1 stack | 46 | 78 | 80 | 86 | **78** |
+| Lifebloom R1 bloom | 8 | 1067 | 1596 | 1596 | 790 |
+| Regrowth R9 tick | 14 | 418 | 418 | 420 | 207 |
+| Regrowth R9 direct | 2 | 2618 | 2646 | 2646 | 1231 |
+
+Every bucket runs from the model's value to twice it, and the one bucket that sits *on* the
+model is the one whose events wasted nothing — a Lifebloom ticking on a tank who is taking
+damage. Halve the rest and they all land within a few percent too.
+
+The overheal was never written down separately, so a v1 stream **cannot be un-mixed**: the
+recordings on disk are exact about *when* and *what* and inflated about *how much*. The fix
+is the `if`, written out; the stream carries `v = 2`; and `tools/reproduce.lua` and
+`tools/healcheck.lua` say so instead of quoting a magnitude from a v1 stream.
+
+**The importer read the log's `spellPower` as +healing.** In a TBC log that field is the
+character sheet's **spell damage**, and healing gear is itemised at roughly +88 healing per
++31 damage — so every imported raid healer was being run at about a third of their real
+power. That is the whole of the "Rejuvenation R13 and Regrowth R10 read 1.6-1.8x low"
+finding.
+
+The factor is measured rather than looked up. `tools/wclcheckkit.lua --fit` solves each parse
+for the +healing that makes the model reproduce what the log says each spell healed — **one
+row at a time**, so the rows can disagree. They do not: on Ghnoy's Nightbane parse a
+Rejuvenation tick asks for +2000, a Lifebloom bloom for +2040, a Regrowth tick for +2045 and
+a Lifebloom tick for +2105. Four independent families, one number, 5% apart. Over the 17
+parses of the corpus that number divided by the reported `spellPower` is **min 2.66, median
+3.08, max 3.46** (the spread is real gear variation), and `SPELLPOWER_TO_HEALING = 3.08` in
+`tools/wclconvert.py` carries the derivation.
+
+**Result.** The Malchezaar control reproduces **95% with no calibration at all** — the
+observed table that used to take it from 47% to 95% is now worth one point (95 -> 96), which
+is what it should be worth when the spell data is right. Per family, uncalibrated:
+Lifebloom 90%, Regrowth 87%, Rejuvenation 103%, Swiftmend 67%. Against the two Nightbane
+parses `wclcheckkit` reads 0.93-0.97 where it read 1.46-1.82.
+
+Tranquility heals under an id the table had never heard of, so 43,104 healing on one parse
+landed in family `?`. The pairing is measured, not looked up — 26983 cast heals as 44208 on
+four parses, 9863 as 44207 on two — and both are aliases now. The engine still generates
+none of it: `Data/SpellData.lua` has no heal values for Tranquility and `SpellKit` marks it
+`dataMissing` rather than inventing one.
+
+**What did not change, and two things that did not fit.**
+
+- Nothing in `Data/SpellData.lua`'s heal values. They were checked, not corrected. The
+  `-- VERIFY` marks come off Rejuvenation R13 and Regrowth R10; Healing Touch R12/R13 keep
+  theirs, because nobody in the corpus casts one.
+- **Regrowth's direct is the corpus's one outlier.** On every parse that has the row it asks
+  for ~28% more +healing than the other four — i.e. the model's Regrowth direct reads about
+  13% low. The coefficient it uses (0.287 direct / 0.699 HoT, from the amount-weighted hybrid
+  split in `docs/DECISIONS.md` v0.6 §15) is the community's own number, and the *HoT* half of
+  the same split agrees with Rejuvenation and Lifebloom to within 5%, so the split is not
+  simply mis-weighted. A measurement without a mechanism is not a licence to edit frozen
+  data; it is written down here and left alone.
+- The bottom-cluster heuristic for a 1-stack Lifebloom tick fails on 6 of the 17 parses
+  (implying +745 to +1280 where the other rows agree on ~+2100). The same corpus question as
+  the Nightbane per-stack spread in §4b.
+- The solver still loses to the threshold rules on the raid corpus and still wins on the
+  author's 5-man recordings, and correcting the healing did not flip either: the corpus goes
+  from rules 140 deaths / 3967s floor / 745k mana against the solver's 181 / 3970 / 803k, to
+  116 / 3432 / 668k against 167 / 3875 / 756k. On the author's own fights the solver still
+  spends **44% less** at equal deaths and floor seconds.
+
 ## 5. Still to come in this version
 
 - **The frames are still rebuilt at each pull boundary.** Playback no longer stops there, but

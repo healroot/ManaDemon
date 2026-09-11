@@ -97,10 +97,18 @@ for key, c in pairs(realDB.char or {}) do
                 if k2 == K.OWNHEAL or k2 == K.OWNTICK then logOwn = logOwn + (rec.ev.amt[i] or 0) end
             end
             local eng = (r.healed or 0) + (r.overhealed or 0)
-            print(string.format("%-30s %9d %9d %6.0f%%  %d -> %d",
+            -- v0.14.7: a stream older than v2 wrote every own heal down as
+            -- heal + overheal (the truncated multi-return in
+            -- Engine/FightRecorder.lua), so its `log` column is inflated by up
+            -- to 2x and the share below is not a statement about the engine.
+            -- Imported Warcraft Logs recordings are written by the converter
+            -- and carry v2.
+            local stale = (rec.v or 1) < 2
+            print(string.format("%-30s %9d %9d %6.0f%%  %d -> %d%s",
                 string.sub(tostring(rec.zone), 1, 30), logOwn, eng,
                 logOwn > 0 and 100 * eng / logOwn or 0,
-                #(rec.deaths or {}), r.deaths and r.deaths.n or 0))
+                #(rec.deaths or {}), r.deaths and r.deaths.n or 0,
+                stale and "   [v1 stream: log column is heal + overheal]" or ""))
             -- per family, which is what says WHERE the healing went missing
             local SDm = MD.SpellData
             local logFam = {}

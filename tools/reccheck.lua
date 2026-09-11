@@ -33,6 +33,15 @@ if rec then
     check("damage recorded", (n[K.DMG] or 0) == 3, tostring(n[K.DMG]))
     check("foreign heal recorded", (n[K.FHEAL] or 0) == 1, tostring(n[K.FHEAL]))
     check("own tick recorded", (n[K.OWNTICK] or 0) == 1, tostring(n[K.OWNTICK]))
+    -- v0.14.7: and recorded GROSS, not gross + overheal again. The fixture's
+    -- tick is 400 of which 150 was wasted, under the convention this client
+    -- actually uses (db.healAmountGross), so 550 means the overheal was counted
+    -- twice -- which is what every real recording on disk carries.
+    local tickAmt
+    for i = 1, rec.n do if rec.ev.kind[i] == K.OWNTICK then tickAmt = rec.ev.amt[i] end end
+    check("own tick recorded gross, once", tickAmt == 400,
+        string.format("%s, expected the log's 400 (550 = the overheal added back on)",
+            tostring(tickAmt)))
     check("death recorded", #rec.deaths == 1, tostring(#rec.deaths))
     -- v0.8.3: Shield Wall apply + remove, the mage's debuff apply + dose; the
     -- Fortitude buff (not whitelisted) and the mob's debuff (untracked) dropped

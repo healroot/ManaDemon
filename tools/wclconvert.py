@@ -19,7 +19,8 @@ What is MEASURED from the log (and how):
 What is INFERRED and marked as such:
   role       the player who took the most damage is the tank; our healer is the
              healer; everybody else is a damager
-  healing    the spellPower the client reported on their own casts
+  healing    the spellPower the client reported on their own casts, x
+             SPELLPOWER_TO_HEALING -- the log's field is SPELL DAMAGE, not +healing
 
 See tools/wclfetch.py for the classResources key-name trap.
 """
@@ -29,6 +30,23 @@ from collections import Counter, defaultdict
 K = dict(DMG=1, FHEAL=2, OWNCAST=3, OWNHEAL=4, OWNTICK=5, CASTSTART=6,
          CANCEL=7, FORM=8, DIED=9, ABSORB=10, CD=11, AURA=12, THREAT=13, ECAST=14)
 CRIT_FLAG = 100000
+
+# v0.14.7. The `spellPower` a TBC log carries on a cast is the character sheet's
+# SPELL DAMAGE, not their +healing, and the two are not the same number: healing
+# gear is itemised at roughly +88 healing per +31 damage. Taking it for +healing
+# ran every imported raid healer at a third of their real power, which is where
+# "Rejuvenation R13 and Regrowth R10 read 1.6-1.8x low" came from -- the spell
+# data was never the problem.
+#
+# The factor is MEASURED, not looked up: `tools/wclcheckkit.lua --fit` solves
+# each parse for the +healing that makes our model reproduce what the log says
+# each spell healed. Four independent families (Rejuvenation's tick, Regrowth's
+# tick, Lifebloom's tick and its bloom) agree on one value per parse to within a
+# few percent, and over the 17 parses of the corpus that value divided by the
+# reported spellPower is  min 2.66, median 3.08, max 3.46.  The spread is real
+# gear variation, so a single constant still leaves +-13% on +healing (about
+# +-6% on a heal); `--fit` is how a parse's own residual is read back.
+SPELLPOWER_TO_HEALING = 3.08
 HP_EVERY, MANA_EVERY = 5.0, 2.0
 HEAL_FAMILIES = ("Lifebloom", "Rejuvenation", "Regrowth", "Healing Touch",
                  "Swiftmend", "Tranquility", "Nourish")
@@ -378,7 +396,8 @@ def convert(blob, healer):
     sp = Counter(e.get("spellPower") for e in blob["casts"]
                  if e.get("sourceID") == hid and e.get("resourceActor") == 1
                  and e.get("spellPower"))
-    healing = sp.most_common(1)[0][0] if sp else 0
+    spellpower = sp.most_common(1)[0][0] if sp else 0
+    healing = spellpower * SPELLPOWER_TO_HEALING
 
     ci = {}
     for e in blob.get("combatantinfo", []):
@@ -420,7 +439,11 @@ def convert(blob, healer):
     foreign_share = for_h / (own_h + for_h) if (own_h + for_h) > 0 else 0.0
 
     stream = {
-        "v": 1,
+        # v2 (v0.14.7): own-heal amounts are gross ONCE. This converter always
+        # wrote them that way -- WCL reports `amount` net with `overheal` on top,
+        # so amount + overheal IS the gross -- but the game's own recorder did
+        # not until v0.14.7, and the version is what tells the two apart.
+        "v": 2,
         "id": int((blob["reportStart"] + t0) / 1000),
         "zone": "%s (WCL %s #%d)" % (fight["name"], blob["code"], fight["id"]),
         # the encounter on its own: `zone` carries the report code so a record can
@@ -463,7 +486,8 @@ def convert(blob, healer):
 
     profile = {
         "at": int((blob["reportStart"] + t0) / 1000), "level": 70, "class": "DRUID",
-        "healing": int(healing), "crit": round(critpct, 2),
+        "healing": int(healing), "spellPower": int(spellpower),
+        "crit": round(critpct, 2),
         "spirit": int(ci.get("spirit") or 0), "intellect": int(ci.get("intellect") or 0),
         "manaMax": pool, "form": "caster",
         "talents": talents,

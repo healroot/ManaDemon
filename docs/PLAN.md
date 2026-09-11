@@ -306,26 +306,47 @@ log says it did.
 - [ ] **v0.14.6 — the solver's reasons in the replay and on the card.** It decided on a
   number; the sentence can name it. `SV.ReasonText` exists and is wired into `SP.ReasonText`,
   but the card's `why` section and the strip still assume a rules plan.
-- [ ] **v0.14.7 — correct the `-- VERIFY` heal values** in `Data/SpellData.lua` from the
-  Warcraft Logs corpus (`tools/wclcheckkit.lua` measures the error; Rejuvenation R13 and
-  Regrowth R10 read 1.6-1.8x low), then re-run every comparison on the level 70 imports.
-  v0.14.4 sharpened this into the whole of what is left, and added three measurements:
-  - Against the **author's own client-written profile** (level 64, +511 healing, not an
-    inference) their recorded heals are a flat **~2.05x** the model -- Rejuvenation tick 2.11,
-    Regrowth tick 2.02, Regrowth direct 2.13, Lifebloom bloom 2.02 -- while the Lifebloom
-    1-stack tick matches at **1.00**. One family right and four wrong by the same factor is a
-    coefficient or a talent multiplier, not gear, and it is the sharpest lead in the project.
-  - Now that the bloom row resolves, `wclcheckkit` compares it for the first time: 1.68 and
-    1.60 low, the same band as everything else.
-  - Tranquility (44208) is not in `Data/SpellData.lua` at all, so 43,104 healing on one parse
-    lands in family `?`.
-  Until this is closed, no reproduction number above ~50% should be read off an *uncalibrated*
-  recording, and `Engine/Intuition.lua` stays shipped-off as already decided.
+- [x] **v0.14.7 — the heal values were right; two readers of them were not.**
+  (a) **`Engine/FightRecorder.lua` wrote every own heal down twice over** -- the multi-return
+  trap `CLAUDE.md` names, third occurrence: `local _, gross = MD.Overheal and
+  MD.Overheal:Split(...)` truncates to one value, so `gross` was always nil and the fallback
+  `amount + overheal` always ran. This client reports `amount` GROSS, so every recording ever
+  made carries heal + overheal -- 1.0x the truth where nothing was wasted, 2.0x where
+  everything was. That is the whole of the "uncalibrated 46-68%". The overheal was never
+  stored separately, so v1 streams cannot be un-mixed; the stream now carries `v = 2` and
+  `tools/reproduce.lua` / `tools/healcheck.lua` say so rather than quoting a magnitude.
+  (b) **`tools/wclconvert.py` read the log's `spellPower` as +healing.** In a TBC log that is
+  SPELL DAMAGE; healing gear is itemised at about +88 healing per +31 damage, so every
+  imported raid healer ran at a third of their power. `SPELLPOWER_TO_HEALING = 3.08`,
+  measured: `tools/wclcheckkit.lua --fit` solves each parse for the +healing that reproduces
+  the log one row at a time, and four independent families agree per parse to within a few
+  percent (Ghnoy: 2000 / 2040 / 2045 / 2105). Over 17 parses, implied/spellPower is min 2.66,
+  median 3.08, max 3.46.
+  (c) **Nothing in `Data/SpellData.lua`'s heal values changed.** They were checked and they
+  hold; the `-- VERIFY` marks come off Rejuvenation R13 and Regrowth R10. Tranquility's heal
+  ids are aliased (26983 -> 44208, 9863 -> 44207, both measured by pairing caster with healer
+  in the corpus), so 43,104 healing stops landing in family `?`.
+  (d) **Result:** the Malchezaar control reproduces **95% with no calibration at all** (the
+  observed table is now worth one point, 95 -> 96); `wclcheckkit` reads 0.93-0.97 where it
+  read 1.46-1.82. New tool `tools/healcheck.lua` -- the client-side twin of `wclcheckkit`,
+  the author's own profile against their own recordings, read by the minimum of each bucket.
+
 - [ ] **v0.14.8 — `SP.Search` over the solver's parameters** (`minValue`, `horizon`), the four
   strategy objectives reading the solver's pool, and the Review tab able to say which planner
   coached a fight.
 
 Known and deliberately not fixed:
+
+- **Regrowth's DIRECT reads about 13% low** against the whole Warcraft Logs corpus: on every
+  parse that has the row it asks for ~28% more +healing than the other four families
+  (`tools/wclcheckkit.lua --fit`). The coefficient is the community's own amount-weighted
+  hybrid split (0.287 / 0.699, `docs/DECISIONS.md` v0.6 §15) and the HoT half of that same
+  split agrees with Rejuvenation and Lifebloom to within 5%, so it is not simply
+  mis-weighted. A measurement without a mechanism is not a licence to edit frozen data.
+
+- The **bottom-cluster** heuristic for a 1-stack Lifebloom tick fails on 6 of the 17 parses
+  (implying +745 to +1280 of healing where the parse's other rows agree on ~+2100). Same
+  corpus question as the per-stack spread below.
 
 - One druid's **per-stack** Lifebloom tick moves between applications inside a single
   Nightbane parse -- 115, 231, 244, 260, 308, 345 -- and changes on a refresh, which is

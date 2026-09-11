@@ -7,6 +7,16 @@
 -- Costs corrected from /md verify output on 2026-09-03 (level 64 druid):
 -- Rejuvenation R6-R12, Tranquility R1-R4, Swiftmend. Fields marked VERIFY
 -- are the least certain (heal values for ranks not yet learned).
+--
+-- v0.14.7: the heal values were CHECKED against 17 level 70 Warcraft Logs
+-- parses, and they hold. Solving each parse for the +healing that makes this
+-- table reproduce what the log says each spell healed, four independent
+-- families -- a Rejuvenation tick, a Regrowth tick, a Lifebloom tick and its
+-- bloom -- agree on one number per parse to within a few percent
+-- (tools/run.sh tools/wclcheckkit.lua --fit). The 1.6-1.8x error that was
+-- blamed on this table was the IMPORTER reading the log's spellPower as
+-- +healing; nothing here was wrong. Healing Touch R12/R13 stay marked: nobody
+-- in the corpus casts one, so nobody has measured them.
 local _, MD = ...
 
 local SD = {}
@@ -69,7 +79,7 @@ SD.spells = {
     [9841]  = { family = "Rejuvenation", rank = 10, level = 58, cost = 335, hotTotal = 756,  hotDuration = 12 },
     [25299] = { family = "Rejuvenation", rank = 11, level = 60, cost = 360, hotTotal = 888,  hotDuration = 12 },
     [26981] = { family = "Rejuvenation", rank = 12, level = 63, cost = 370, hotTotal = 932,  hotDuration = 12 }, -- VERIFY heal
-    [26982] = { family = "Rejuvenation", rank = 13, level = 69, cost = 415, hotTotal = 1060, hotDuration = 12 }, -- VERIFY
+    [26982] = { family = "Rejuvenation", rank = 13, level = 69, cost = 415, hotTotal = 1060, hotDuration = 12 }, -- v0.14.7 checked
 
     -- Regrowth (hybrid: direct + HoT over 21s, 7 ticks)
     [8936]  = { family = "Regrowth", rank = 1,  level = 12, cost = 80,  cast = 2.0, healMin = 84,   healMax = 98,   hotTotal = 98,   hotDuration = 21 },
@@ -81,7 +91,9 @@ SD.spells = {
     [9856]  = { family = "Regrowth", rank = 7,  level = 48, cost = 405, cast = 2.0, healMin = 646,  healMax = 724,  hotTotal = 686,  hotDuration = 21 },
     [9857]  = { family = "Regrowth", rank = 8,  level = 54, cost = 485, cast = 2.0, healMin = 809,  healMax = 905,  hotTotal = 861,  hotDuration = 21 },
     [9858]  = { family = "Regrowth", rank = 9,  level = 60, cost = 575, cast = 2.0, healMin = 1003, healMax = 1119, hotTotal = 1064, hotDuration = 21 },
-    [26980] = { family = "Regrowth", rank = 10, level = 65, cost = 675, cast = 2.0, healMin = 1215, healMax = 1356, hotTotal = 1274, hotDuration = 21 }, -- VERIFY
+    -- v0.14.7 checked: the HoT lands within 5% on 17 level 70 parses; the
+    -- DIRECT is the corpus's one outlier and reads ~13% low (docs/SPEC-v0.14.md 4c)
+    [26980] = { family = "Regrowth", rank = 10, level = 65, cost = 675, cast = 2.0, healMin = 1215, healMax = 1356, hotTotal = 1274, hotDuration = 21 },
 
     -- Lifebloom (single rank in TBC; 7s HoT + bloom on expiry)
     [33763] = { family = "Lifebloom", rank = 1, level = 64, cost = 220, hotTotal = 273, hotDuration = 7, bloom = 600 },
@@ -234,6 +246,15 @@ SD.knownSet = {}  -- spellID -> true for known spells
 -- what decides which rank the dashboard suggests.
 SD.alias = {
     [33778] = 33763,    -- Lifebloom's bloom -> the Lifebloom that bloomed
+    -- v0.14.7: Tranquility heals under its own id, never the one cast, so
+    -- 43,104 healing on one parse landed in family "?". MEASURED by pairing
+    -- caster with healer in the Warcraft Logs corpus, not looked up:
+    --   26983 (R5) cast -> 44208 healed, on four parses
+    --    9863 (R4) cast -> 44207 healed, on two
+    -- The lower ranks are presumed to follow the same descent and are NOT
+    -- listed: nobody in the corpus cast one, so nobody has seen the id.
+    [44208] = 26983,
+    [44207] = 9863,
 }
 
 -- The id to attribute a heal to. Always use this on an id that came out of a
