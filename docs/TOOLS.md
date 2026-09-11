@@ -72,10 +72,22 @@ bash tools/run.sh tools/reproduce.lua .logs/wcl-holdout.lua .logs/wcl-holdout-ob
 ```
 
 Replays a recording's own casts and reports how much of the **recorded healing** the engine
-generates from them. Run this before believing any comparison: it currently comes back
-42-70%, which is why health curves fail their gate and why a planner's deaths cannot be told
-from the engine's. With an `observed.lua` the kit is first scaled to what the log says each
-spell healed, so spell values are removed from the question.
+generates from them, split per family and per heal event, with the cast count and the deaths
+beside it. Run this before believing any comparison.
+
+With an `observed.lua` the kit is first scaled to what the log says each spell healed, so
+spell values are removed from the question and what is left is the engine alone. On that
+footing the Malchezaar parse reads **95%** (v0.14.4; it was 47%, and it used to kill a tank
+nobody lost). Without one it reads **46-68%**, and that whole residue is `Data/SpellData.lua`
+— the heal *events* reproduce one for one (41/43, 94/94, 28/28, 7/7 on the author's fights),
+so what is wrong is the size of each heal, not when it lands. See `docs/SPEC-v0.14.md` §4b.
+
+The `observed.lua` beside it is written by `wclrules.py --observed`:
+
+```bash
+python3 tools/wclrules.py .logs/wcl/waFx9B1kNQJWP3hq-103.json \
+        --healer Samwellx --observed .logs/wcl-holdout-observed.lua
+```
 
 ### `solvercmp.lua` — the solver against the threshold rules
 

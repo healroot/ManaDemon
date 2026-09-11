@@ -17,7 +17,19 @@ HOT_DUR = {"Lifebloom": 7.0, "Rejuvenation": 12.0, "Regrowth": 21.0}
 
 def observed_table(b, hid, abil, out):
     """The median gross, non-crit amount each spell actually healed, as a Lua
-    table for tools/wclcheckkit.lua to hold our model against."""
+    table for tools/wclcheckkit.lua to hold our model against.
+
+    A Lifebloom tick is `stacks * per-stack`, and the log does not say which
+    stack a tick belongs to.  Until v0.14.4 this assumed the MEDIAN tick was a
+    3-stack one; on a Prince Malchezaar parse the median was a 2-stack tick
+    (264 / 528 / 792 in the log), so every calibrated tick came out at two
+    thirds of the truth, the simulated tank fell behind and died at 53s in a
+    fight where nobody died -- which is where 111 of that parse's 124 missing
+    heal events went.  The per-stack value is measured instead: ticks cluster at
+    1x, 2x and 3x a base (times whatever +healing procs were up), so the bottom
+    cluster IS one stack.  The median of it is robust to a single odd event in
+    a way the bare minimum is not.
+    """
     g = defaultdict(list)
     for e in b["healing"]:
         if e.get("sourceID") != hid or e.get("hitType") == 2:
@@ -30,9 +42,14 @@ def observed_table(b, hid, abil, out):
         if len(v) < 3:
             continue
         nm = abil.get(sid, str(sid))
+        if nm == "Lifebloom" and what == "tick":
+            lo = min(v)
+            base = [x for x in v if x <= lo * 1.15]
+            median, stacks = statistics.median(base), 1
+        else:
+            median, stacks = statistics.median(v), 1
         rows.append('{id=%d,what="%s",label="%s %s",median=%.1f,stacks=%d}'
-                    % (sid, what, nm, what, statistics.median(v),
-                       3 if (nm == "Lifebloom" and what == "tick") else 1))
+                    % (sid, what, nm, what, median, stacks))
     return "{" + ",".join(rows) + "}"
 
 

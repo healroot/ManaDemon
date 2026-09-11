@@ -279,12 +279,24 @@ log says it did.
   HoT; `Data/SpellData.lua` knows only 33763, so **44,946 healing on one parse is attributed
   to nothing at all**. Needs an alias rather than a second rank-1 row, which would corrupt
   the known-rank index.
-- [ ] **v0.14.4 — the rest of the reproduction gap.** After v0.14.2 a raid parse reproduces
-  255 of the log's 366 ticks (70%) and 47% of its healing; the author's own fights are at
-  48-74%. Swiftmend went 0 -> 13% once its HoTs were there, so it was downstream as
-  suspected, but 13% is still not right. Next measurements: which targets the missing ticks
-  belong to (the scenario tracks 8 of 10 players on that parse, so casts on the other two
-  land nowhere), and whether cast times leave room for 82 casts in 129s.
+- [x] **v0.14.4 — the rest of the reproduction gap.** *(2026-09-11; `docs/SPEC-v0.14.md` §4b.)*
+  47% -> **95%** on the Malchezaar parse, phantom death gone, 358 of 366 ticks. Three findings,
+  only one of them in the engine:
+  (a) the missing healing was **one target** -- every other player reproduced 100% of their
+  heal events, and 111 of the 124 missing ones were simply downstream of the tank dying at
+  53.2s, since `Land` refuses a corpse. The v0.14.2 note's guess (8 of 10 players tracked) was
+  wrong: the roster is 8 and all 8 are tracked.
+  (b) `wclrules.py --observed` assumed the **median** Lifebloom tick was a 3-stack one; in that
+  parse the ticks are 264/528/792 and the median is a 2-stack tick, so every calibrated tick was
+  two thirds of the truth. Now measured from the bottom cluster. Also: the bloom row is keyed
+  33778 and the kit 33763, so it had never matched anything -- `SD:Resolve` at both consumers.
+  (c) **v0.14.2's bloom-scales-with-stacks was wrong and is reverted.** Pairing every bloom in
+  the corpus with the tick before it gives the same bloom at 1, 2 and 3 stacks (Nightbane #55:
+  231/462/694 tick -> 1501 bloom, all three). The 2.1x spread that suggested scaling was a crit
+  (exactly 1.5x) and a +healing proc (exactly 1.30x, and the same 1.30 is on Regrowth's and
+  Rejuvenation's ticks in the same fight). Self-test 4b now measures the bloom directly by
+  running the chain twice with the bloom zeroed, and fails against the unfixed engine.
+  Consequence: the solver's margin over the rules re-measures at **44% less mana**, not 33%.
 - [ ] **v0.14.5 — one set of frames for the whole run.** Playback no longer stops at a pull
   boundary (v0.14.1) but `RunSeek` reaches the next pull through `OpenReplay`, which re-lays
   the window out. Needs rows built once from `RT.Roster` with each pull's roster mapped on by
@@ -297,11 +309,31 @@ log says it did.
 - [ ] **v0.14.7 — correct the `-- VERIFY` heal values** in `Data/SpellData.lua` from the
   Warcraft Logs corpus (`tools/wclcheckkit.lua` measures the error; Rejuvenation R13 and
   Regrowth R10 read 1.6-1.8x low), then re-run every comparison on the level 70 imports.
+  v0.14.4 sharpened this into the whole of what is left, and added three measurements:
+  - Against the **author's own client-written profile** (level 64, +511 healing, not an
+    inference) their recorded heals are a flat **~2.05x** the model -- Rejuvenation tick 2.11,
+    Regrowth tick 2.02, Regrowth direct 2.13, Lifebloom bloom 2.02 -- while the Lifebloom
+    1-stack tick matches at **1.00**. One family right and four wrong by the same factor is a
+    coefficient or a talent multiplier, not gear, and it is the sharpest lead in the project.
+  - Now that the bloom row resolves, `wclcheckkit` compares it for the first time: 1.68 and
+    1.60 low, the same band as everything else.
+  - Tranquility (44208) is not in `Data/SpellData.lua` at all, so 43,104 healing on one parse
+    lands in family `?`.
+  Until this is closed, no reproduction number above ~50% should be read off an *uncalibrated*
+  recording, and `Engine/Intuition.lua` stays shipped-off as already decided.
 - [ ] **v0.14.8 — `SP.Search` over the solver's parameters** (`minValue`, `horizon`), the four
   strategy objectives reading the solver's pool, and the Review tab able to say which planner
   coached a fight.
 
 Known and deliberately not fixed:
+
+- One druid's **per-stack** Lifebloom tick moves between applications inside a single
+  Nightbane parse -- 115, 231, 244, 260, 308, 345 -- and changes on a refresh, which is
+  Lifebloom re-snapshotting (a proc falling off drops a rolling 3-stack from 781 to 694
+  mid-chain). A single median cannot calibrate that, which is why those two parses still
+  reproduce 64% and 40%. A 2.7x spread is more than any proc explains; it is an open question
+  about the corpus, not about the engine, and it is why the Malchezaar parse (one flat base,
+  264) is the control to quote.
 
 - `sag` (the convex deficit weighting, v0.13.5) is **measured inert** and ships at 0. It stays
   because it encodes a stated preference, not because it has been shown to help.

@@ -77,8 +77,9 @@ function SV.Deposits(e, st, out)
         for k = 1, ticks do put(cast + k * period, e.tick * stacks) end
     end
     if (e.bloom or 0) > 0 then
-        local stacks = math.min(3, ((st and st.active) and (st.stacks or 1) or 0) + 1)
-        put(cast + (e.duration or (ticks * period)), e.bloom * stacks)
+        -- flat, NOT `* stacks`: v0.14.4 paired every bloom in the corpus with
+        -- the tick before it and the bloom is the same at 1, 2 and 3 stacks
+        put(cast + (e.duration or (ticks * period)), e.bloom)
     end
     return out, n
 end
@@ -105,7 +106,7 @@ function SV.InFlight(S, i, t, out, skipFamily)
             if (st.bloom or 0) > 0 and n < 64 then
                 n = n + 1
                 out[n] = out[n] or {}
-                out[n][1], out[n][2] = st.expires or t, (st.bloom or 0) * (st.stacks or 1)
+                out[n][1], out[n][2] = st.expires or t, (st.bloom or 0)
             end
         end
     end

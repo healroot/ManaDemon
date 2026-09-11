@@ -228,6 +228,10 @@ function SM:Run(scenario, plan, opts)
     local dur = scenario.dur or 0
     local refreshKeepsTicks = opts.refreshKeepsTicks or false
     local onCast = opts.onCast
+    -- v0.14.4: the same door onCast opens, for healing. tools/reproduce.lua needs
+    -- to know WHICH target and WHICH family lost a tick, not only that the total
+    -- came up short; nothing in the addon passes it.
+    local onHeal = opts.onHeal
     local critMode = opts.critMode or "ev"
     local crit = (kit and kit.crit) or 0
 
@@ -361,6 +365,7 @@ function SM:Run(scenario, plan, opts)
         overhealed = overhealed + (amount - eff)
         S.healByFamily[family] = (S.healByFamily[family] or 0) + eff
         S.ohByFamily[family] = (S.ohByFamily[family] or 0) + (amount - eff)
+        if onHeal then onHeal(t, ti, amount, eff, family) end
     end
 
     local function Damage(ti, amount)
@@ -782,17 +787,20 @@ function SM:Run(scenario, plan, opts)
                 if st and st.active and st.gen == aux then
                     local bloomed = 0
                     if b == HOT_INDEX.Lifebloom and st.bloom > 0 and not S.dead[a] then
-                        -- v0.14.2: the bloom is the STACK's, exactly as the ticks
-                        -- beside it are `st.tick * st.stacks`. Landing one
-                        -- application's worth made every rolled Lifebloom
-                        -- under-heal by up to twice the bloom, and Lifebloom is
-                        -- around 70% of a resto druid's healing -- which is most
-                        -- of why a recording only reproduced 42-70% of the
-                        -- healing the log recorded (tools/reproduce.lua).
-                        -- The log agrees: blooms there range 1653-3477 against a
-                        -- flat 528 tick, and a 2.1x spread in one spell's direct
-                        -- heal is stack scaling.
-                        Land(a, st.bloom * (st.stacks or 1), st.family or "Lifebloom")
+                        -- The bloom is ONE application's, whatever the stack --
+                        -- unlike the ticks beside it, which are `st.tick *
+                        -- st.stacks`. v0.14.2 scaled it by the stack on the
+                        -- strength of a 2.1x spread in one parse's blooms; that
+                        -- spread was crits and +healing procs, and v0.14.4
+                        -- measured the mechanic directly by pairing every bloom
+                        -- with the last tick before it (which names the stack):
+                        --   Nightbane #55: 231/462/694 tick -> 1501 bloom, all three
+                        --   Nightbane #55: 308/616/923 tick -> 1967 bloom, all three
+                        --   Malchezaar:    264/528/826 tick -> 1653/1654/1705
+                        -- One bloom per application-size, identical at 1, 2 and
+                        -- 3 stacks, across 22 imported parses. Engine/RankMath
+                        -- and the endDeficit term always had it this way.
+                        Land(a, st.bloom, st.family or "Lifebloom")
                         bloomCount = bloomCount + 1
                         bloomed = 1
                     end

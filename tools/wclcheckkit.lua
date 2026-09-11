@@ -43,7 +43,11 @@ for key, p in pairs(pre) do
             key, healing, crit, next(tal) and "deep resto (inferred)" or "none"))
         print(string.format("   %-22s %10s %10s %8s", "", "model", "log", "ratio"))
         for _, row in ipairs(o) do
-            local e = kit[row.id]
+            -- v0.14.4: a heal can arrive under a different spell id from the
+            -- one cast -- Lifebloom's bloom is 33778, its HoT 33763 -- and the
+            -- kit is keyed by the cast. Without the alias the bloom row silently
+            -- matched nothing and the bloom was never compared at all.
+            local e = kit[MD.SpellData:Resolve(row.id)]
             if e then
                 local model
                 if row.what == "tick" then

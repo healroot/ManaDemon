@@ -61,7 +61,10 @@ local function Calibrate(kit, who)
     for _, form in pairs(kit) do
         if type(form) == "table" then
             for _, row in ipairs(rows) do
-                local e = form[row.id]
+                -- v0.14.4: Lifebloom's bloom arrives as 33778, the kit is keyed
+                -- by the HoT's 33763; without the alias the bloom was left
+                -- uncalibrated while every tick around it was scaled
+                local e = form[MD.SpellData:Resolve(row.id)]
                 if e then
                     local m = (row.what == "tick") and (e.tick or 0) * (row.stacks or 1)
                               or ((e.direct or 0) + (e.bloom or 0))

@@ -2944,3 +2944,55 @@ whether the cast times leave room for 82 casts in 129 seconds.
 Both fixes were written test-first and each was checked against the unfixed engine: 4b
 reported "3 stacks heal 1217 more than 1" (the extra tick stacks, no extra blooms) and 4c
 "10 ticks, expected 11". simcheck 10 -> 12 self-tests. 12 suites green.
+
+---
+
+## 2026-09-11 — v0.14.4: the reproduction gap measured to its end (and a v0.14.2 retraction)
+
+Continued straight from the v0.14.x plan written the day before. The item was "the rest of
+the reproduction gap": a Prince Malchezaar parse reproduced 47% of its recorded healing and
+killed a tank nobody lost.
+
+**What the measurement said.** Split per target, every player in that parse reproduced *100%
+of their heal events* except the tank, at 40% — because the simulated tank died at 53.2s and
+`Land` refuses a corpse. 111 of the 124 missing events were downstream of one death. Both
+guesses written into the plan the day before were wrong: the roster is 8 and all 8 are
+tracked (not 8 of 10), and all 82 casts execute in the 129s (not a cast-time problem).
+
+**Two of the three causes were in the harness, not the engine.**
+`tools/wclrules.py --observed` assumed the *median* Lifebloom tick was a 3-stack one; in this
+parse the ticks are 264/528/792 and the median is a 2-stack tick, so every calibrated tick
+came out at two thirds of the truth, the tank fell behind and died. It is measured now (the
+bottom cluster is one stack). And the bloom's observed row is keyed 33778 while the kit is
+keyed 33763, so it had never matched anything — `SD:Resolve` at both consumers.
+
+**The third is a retraction.** v0.14.2 had made Lifebloom's bloom scale with its stack, on
+the strength of one parse's blooms spanning 1653-3477. That spread is not stacks: 3477 is
+exactly 1.5x 2318 (a crit) and 2148 is exactly 1.30x 1653 (a +healing proc — the same 1.30
+appears on Regrowth's and Rejuvenation's ticks in the same fight). Pairing every bloom in the
+22-parse corpus with the last tick before it, which names the stack, gives the same bloom at
+1, 2 and 3 stacks (Nightbane #55: 231/462/694 tick -> 1501 bloom, all three). Reverted in
+`Engine/SimModel.lua`, `SV.Deposits` and `SV.InFlight`; `Engine/RankMath.lua` and the
+`endDeficit` term had always been right. Self-test **4b** was rewritten to measure the bloom
+directly — the same 3-stack chain run twice, once with the bloom zeroed — and was checked to
+fail against the unfixed engine (2590 where one application is 863).
+
+**Result.** Malchezaar 47% -> **95%**, no phantom death, 358 of 366 ticks. The author's own
+recordings now reproduce their heal *events* one for one (41/43, 94/94, 28/28, 7/7) at 46-68%
+of the amount. The solver's margin over the threshold rules re-measures at **44% less mana**;
+the 33% previously quoted was against the inflated bloom.
+
+**The sharpest lead left, for v0.14.7.** Against the author's own *client-written* profile
+(level 64, +511 healing — measured, not inferred) their recorded heals are a flat **~2.05x**
+the model: Rejuvenation tick 2.11, Regrowth tick 2.02, Regrowth direct 2.13, Lifebloom bloom
+2.02 — while the Lifebloom 1-stack tick matches at **1.00**. One family right and four wrong
+by the same factor is a coefficient or a talent multiplier, not gear.
+
+**Open, and about the corpus rather than the code:** in the two Nightbane parses one druid's
+*per-stack* tick moves between applications (115, 231, 244, 260, 308, 345 in one fight) and
+changes on a refresh, which is Lifebloom re-snapshotting. A single median cannot calibrate
+that, which is why those two still read 64% and 40%.
+
+All twelve suites green (simcheck 12 self-tests, reccheck 53, replaycheck 80, replayui 98,
+runcheck 78, reviewui 44, navui 25, dashui 54, regencheck 27, simwindow 8, solvercheck 70,
+timeline 27).

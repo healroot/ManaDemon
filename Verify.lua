@@ -1050,26 +1050,42 @@ function MD:RunSimRun()
                                              { 2, lifebloomID, e.cost, 1 } }))
         Check("4 lifebloom blooms once", r.blooms == 1, string.format("%d bloom(s)", r.blooms))
 
-        -- v0.14.2: and it blooms for the STACK, not for one application. The
-        -- ticks beside it are `st.tick * st.stacks`; the bloom was not, so
-        -- rolling Lifebloom under-healed by up to twice the bloom -- and
-        -- Lifebloom is about 70% of a resto druid's healing.
+        -- v0.14.4: and it blooms for ONE application, whatever the stack --
+        -- unlike the ticks beside it, which ARE `st.tick * st.stacks`.
+        -- Measured, not recalled: pairing every bloom in the 22-parse Warcraft
+        -- Logs corpus with the last tick before it (the tick size names the
+        -- stack) gives the same bloom at 1, 2 and 3 stacks --
+        --   Nightbane #55  231 / 462 / 694 tick -> 1501 bloom, all three
+        --   Nightbane #55  308 / 616 / 923 tick -> 1967 bloom, all three
+        --   Malchezaar     264 / 528 / 826 tick -> 1653 / 1654 / 1705
+        -- v0.14.2 had scaled it by the stack, reading a 2.1x spread in one
+        -- parse's blooms as stack scaling when it was crits (x1.5 exactly) and
+        -- +healing procs (the same x1.30 and x1.40 appear on Regrowth's and
+        -- Rejuvenation's ticks in the same fight).
+        --
+        -- The test measures the bloom directly rather than inferring it from a
+        -- tick count: the same chain is run twice, once with the bloom zeroed,
+        -- and the difference is what bloomed.
         -- SM:Run hands back a POOLED result table, so read the totals out
         -- before starting the next run (the trap that made v0.13.0's first
         -- comparison report five perfect ties)
-        local function totalOf(casts)
+        local function totalOf(casts, k)
             local rr = SM:Run({ dur = 25, pool = 50000, initial = { mana = 50000, form = "caster" },
-                                targets = SimTargets(1, BIG, 1), kit = kit },
+                                targets = SimTargets(1, BIG, 1), kit = k or kit },
                               SM.ScriptPlan(casts))
             return (rr.healed or 0) + (rr.overhealed or 0)
         end
-        local t1 = totalOf({ { 0, lifebloomID, e.cost, 1 } })
-        local t3 = totalOf({ { 0, lifebloomID, e.cost, 1 },
-                             { 1, lifebloomID, e.cost, 1 },
-                             { 2, lifebloomID, e.cost, 1 } })
-        -- three stacks add two more blooms; the extra tick stacks alone cannot
-        -- account for that much (7 * tick * 2 is well under 2 * bloom on any kit
-        -- where the bloom is the larger half, which it is at every rank)
+        local noBloom = { crit = kit.crit, caster = {}, tree = kit.tree }
+        for id, row in pairs(caster) do noBloom.caster[id] = row end
+        local lbCopy = {}
+        for k2, v in pairs(e) do lbCopy[k2] = v end
+        lbCopy.bloom = 0
+        noBloom.caster[lifebloomID] = lbCopy
+        local chain = { { 0, lifebloomID, e.cost, 1 },
+                        { 1, lifebloomID, e.cost, 1 },
+                        { 2, lifebloomID, e.cost, 1 } }
+        local t3 = totalOf(chain)
+        local t3n = totalOf(chain, noBloom)
         -- v0.14.2: refreshing a HoT must NOT push the next tick back. TBC's
         -- periodic timer keeps its own cadence across a refresh; ours restarted
         -- it, so a Lifebloom rolled every 1.5s against a 1s tick fired two
@@ -1088,10 +1104,10 @@ function MD:RunSimRun()
             string.format("%d ticks over 11.5s of 1s-period Lifebloom, expected 11",
                 rolled.ticks or 0))
 
-        Check("4b lifebloom blooms for the whole stack",
-            (t3 - t1) > 1.5 * (e.bloom or 0),
-            string.format("3 stacks heal %.0f more than 1; two extra blooms would be %.0f",
-                t3 - t1, 2 * (e.bloom or 0)))
+        Check("4b the bloom is one application's, not the stack's",
+            math.abs((t3 - t3n) - (e.bloom or 0)) < 1,
+            string.format("a 3-stack Lifebloom bloomed for %.0f; one application is %.0f, the whole stack would be %.0f",
+                t3 - t3n, e.bloom or 0, 3 * (e.bloom or 0)))
     end
 
     -- 5. Swiftmend eats Regrowth before Rejuvenation
