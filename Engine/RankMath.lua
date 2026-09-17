@@ -226,7 +226,10 @@ function RankMath:RowFor(spellID, ctx, variant, explain)
             calc = { kind = "direct", base = (s.healMin + s.healMax) / 2, relicFlat = relicFlat,
                      bonus = bonus, coef = coef, penalty = pen, bonusMult = ctx.empTouch,
                      bonusMultName = "Empowered Touch", bonusOut = bonusOut,
-                     talentMult = ctx.goN, critMult = critMult, crit = ctx.crit }
+                     talentMult = ctx.goN, critMult = critMult, crit = ctx.crit,
+                     -- v0.14.9: the non-crit roll range, for the spell tooltip
+                     min = (s.healMin + relicFlat + bonusOut) * ctx.goN,
+                     max = (s.healMax + relicFlat + bonusOut) * ctx.goN }
         end
 
     elseif info.type == "hot" then
@@ -274,7 +277,10 @@ function RankMath:RowFor(spellID, ctx, variant, explain)
                      hotCoef = hCoef, hotBonus = hBonus, hot = hot, hotBase = s.hotTotal,
                      bonusMult = ctx.empRejuv, bonusMultName = "Empowered Rejuvenation",
                      critMult = critMult, crit = ctx.regrowthCrit,
-                     duration = s.hotDuration }
+                     duration = s.hotDuration,
+                     -- v0.14.9: the direct hit's non-crit roll range
+                     min = (s.healMin + relicFlat + dBonus) * ctx.goN,
+                     max = (s.healMax + relicFlat + dBonus) * ctx.goN }
         end
 
     elseif info.type == "lifebloom" then
@@ -305,7 +311,11 @@ function RankMath:RowFor(spellID, ctx, variant, explain)
                      hotCoef = SD.lifebloomHotCoef, hotBonus = hotBonus, hot = hot,
                      bloomCoef = SD.lifebloomBloomCoef, bloomBonus = bloomBonus,
                      bloomBase = s.bloom, bloom = bloom,
-                     tick = hot / 7, stacks = variant, duration = s.hotDuration }
+                     tick = hot / 7, stacks = variant, duration = s.hotDuration,
+                     -- the bloom is a direct heal and can crit (a recorded bloom
+                     -- crit is exactly 1.5x); the ticks cannot. Not `crit`:
+                     -- Calibration reads that as the whole spell's chance.
+                     bloomCrit = ctx.crit }
         end
     end
 

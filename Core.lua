@@ -20,6 +20,8 @@ local DEFAULTS = {
                           -- frame, so off also stops it swallowing clicks). The minimap button and the
                           -- ElvUI datatexts are not gated by it and must not be: they are surfaces you
                           -- go to on purpose, and the clock is one you park somewhere and stop looking at
+    spellTooltip = true,  -- v0.14.9: this rank's tick / HoT total / direct range / bloom on the game's own
+                          -- spell tooltip (action bars, spellbook, chat links); Shift adds the derivation
     showCooldown = true,  -- "inn 2:10" segment: the clock if you press your mana cooldown now
     oomConfidence = 0.7,  -- print OOM digits only while sigma/net <= this; above it show the bound.
                           -- Derived from one level-61 dungeon (docs/DESIGN-v0.6.md §3b): re-derive on raid logs.
@@ -409,6 +411,7 @@ MD.COMMANDS = {
     { "/md drink",        "toggle the drink reminder" },
     { "/md rest",         "toggle the 'rest' segment (time to full if you stop casting)" },
     { "/md tooltip",      "hover tooltip on the FLOATING clock only (off also stops it swallowing clicks)" },
+    { "/md spelltip",     "heal values on the game's spell tooltips (bars, spellbook); Shift for the maths" },
     { "/md window N",     "spend estimator half-life in seconds (5-60, default 15)" },
     { "/md verify",       "check static spell data against the live client" },
     { "/md profile",      "copyable dump of every model input - use this for bug reports" },
@@ -471,6 +474,11 @@ SlashCmdList.MANADEMON = function(msg)
     elseif cmd == "rest" then
         MD.db.showRest = not MD.db.showRest
         MD:Print("rest segment " .. (MD.db.showRest and "on." or "off."))
+    elseif cmd == "spelltip" then
+        MD.db.spellTooltip = (MD.db.spellTooltip == false)
+        MD:Print(MD.db.spellTooltip
+            and "spell tooltips: on - hover a heal on your bars or in the spellbook; hold Shift for the maths."
+            or "spell tooltips: off.")
     elseif cmd == "tooltip" or cmd == "tip" then
         MD.db.widgetTooltip = (MD.db.widgetTooltip == false)
         if MD.UpdateVisibility then MD:UpdateVisibility() end

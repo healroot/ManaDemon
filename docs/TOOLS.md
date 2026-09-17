@@ -19,7 +19,7 @@ Python tools run directly with `python3` and need no harness.
 
 ## 1. The test suites
 
-Run all eleven before committing anything the engine or the recorder touches.
+Run all of them before committing anything the engine, the recorder or a tooltip touches.
 
 | suite | what it holds down |
 |---|---|
@@ -34,10 +34,12 @@ Run all eleven before committing anything the engine or the recorder touches.
 | `regencheck.lua` | `/md regentest` against a scripted mana stream, and **what it stores** |
 | `simwindow.lua` | every preset combination's scenario, baselines and search |
 | `solvercheck.lua` | the solver: deposits, the gap integral, causality, the four forecasts, the explainer |
+| `timeline.lua` | the run's clock: segments, seeks, health across a gap |
+| `spelltip.lua` | the spell tooltip (v0.14.9): druid only, once per showing, off means off, and **every number on it is the model's own** — the tick and bloom the simulator heals with, the dashboard's heal |
 
 ```bash
 for t in simcheck reccheck replaycheck replayui runcheck reviewui navui dashui \
-         regencheck simwindow solvercheck; do
+         regencheck simwindow solvercheck timeline spelltip; do
   printf "%-13s " "$t"; bash tools/run.sh tools/$t.lua 2>&1 | tail -1
 done
 ```

@@ -3067,3 +3067,32 @@ All twelve suites green (reccheck 53 -> 54). Files: `Engine/FightRecorder.lua`,
 
 **Next:** v0.14.5 (one set of frames for the whole run) and v0.14.6 (the solver's reasons in
 the replay and on the card) are still open, as is v0.14.8.
+
+---
+
+## 2026-09-17 — v0.14.9: heal values on the game's spell tooltips
+
+**Asked:** the author showed Dynamic Tooltip and wanted its idea here -- this rank's numbers
+on the spell's own tooltip, not only in the dashboard, laid out cleanly: how much each tick,
+the HoT total, the bloom, Regrowth's direct part. Different tooltips for the dashboard and the
+spell were explicitly fine. (The screenshots did not come through to the session; the layout
+was built from the description.)
+
+**Built:** `UI/SpellTooltip.lua` hooks `OnTooltipSetSpell` on `GameTooltip` / `ItemRefTooltip`
+and appends `MD.Tip:Spell(id)` (`UI/Tooltip.lua`). It is a second cut of the same RankMath row
+the dashboard's row tooltip uses, not a second model: `Engine/RankMath.lua` gained only the
+direct heal's non-crit `min`/`max` and the bloom's crit chance (`bloomCrit`, deliberately not
+`crit`, which `Engine/Calibration.lua` reads as the whole spell's chance). Always the live
+context. Druid only, once per showing, under pcall, Shift re-renders through the owner's
+OnEnter. `db.spellTooltip`, `/md spelltip`, and a checkbox in Settings -> General -> Misc.
+
+`tools/spelltip.lua`, 31 assertions: the plumbing (a second SetSpell adds nothing, off adds
+nothing, a non-druid and an unknown spell add nothing, the Simulate strip does not leak in, a
+throwing builder does not break the tooltip, ASCII only) and the arithmetic -- Rejuvenation's
+tick is the simulator's tick and ticks x count = total; Regrowth's range brackets the
+simulator's direct, its total is direct + HoT and its with-crits total is the dashboard's heal;
+Lifebloom's tick and bloom are the simulator's, 2x/3x stacks, 7 ticks + bloom, the rolled value
+is the dashboard's x3 row; Swiftmend's numbers are the kit's; a rank 7 Healing Touch on a
+level 64 druid says it is downranked by the same penalty the row uses.
+
+All thirteen suites green. `docs/TESTING.md` §33 says what to check in game.

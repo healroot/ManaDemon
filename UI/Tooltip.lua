@@ -286,6 +286,146 @@ function Tip:Row(row)
 end
 
 --------------------------------------------------------------------------------
+-- Spell tooltip (v0.14.9): what ONE rank heals, appended to the game's own
+-- tooltip on the action bar, the spellbook and a chat link (the hook lives in
+-- UI/SpellTooltip.lua). The dashboard row tooltip above answers "why is this
+-- rank better than that one"; this answers "what does this button do", so it
+-- is the parts of a cast a healer reads -- each tick, the HoT total, the direct
+-- range, the bloom, the whole -- and nothing about chain-casting to OOM.
+-- Same RankMath row, same numbers, a different cut of them. Shift adds the
+-- derivation.
+--
+-- Always the LIVE context: the dashboard's Simulate strip is a what-if for the
+-- dashboard, and a button on your bar must never show a hypothetical heal.
+--------------------------------------------------------------------------------
+local function R(v) return math.floor((v or 0) + 0.5) end
+
+local function Range(lo, hi)
+    lo, hi = R(lo), R(hi)
+    if lo == hi then return tostring(lo) end
+    return lo .. " - " .. hi
+end
+
+local function Pct(p) return string.format("%d%%", (p or 0) * 100 + 0.5) end
+
+function Tip:Spell(spellID, detail)
+    local lines = {}
+    local SD, RM = MD.SpellData, MD.RankMath
+    local s = SD and SD.spells[spellID]
+    if not s or not RM then return lines end
+    local ctx = RM:Context({ live = true })
+    local head = { l = "ManaDemon", c = Accent(),
+                   r = string.format("+%d healing", R(ctx.bonus)), rc = MUTED }
+
+    -- Swiftmend has no heal of its own: it is worth the HoT it eats, which is
+    -- your highest rank of each, at your stats.
+    if s.family == "Swiftmend" then
+        local out = {}
+        local function eat(family, seconds, label)
+            local id = SD.maxRank[family]
+            local row = id and RM:RowFor(id, ctx, nil, true)
+            local c = row and row.calc
+            if not c then return end
+            local hot = (c.kind == "hybrid") and c.hot or row.heal
+            local ticks = (c.kind == "hybrid") and (c.duration / 3) or c.ticks
+            local n = math.min(ticks, seconds / 3)
+            out[#out + 1] = { l = "Eats " .. label,
+                r = string.format("%d  (%ds of its ticks)", R(hot / ticks * n), seconds), c = KEY }
+        end
+        eat("Rejuvenation", 12, "Rejuvenation")
+        eat("Regrowth", 18, "Regrowth")
+        if #out == 0 then return lines end
+        lines[1] = head
+        for _, ln in ipairs(out) do lines[#lines + 1] = ln end
+        return lines
+    end
+
+    local row = RM:RowFor(spellID, ctx, nil, true)
+    local c = row and row.calc
+    if not c then return lines end
+    lines[1] = head
+
+    if c.kind == "direct" then
+        lines[#lines + 1] = { l = "Heal", r = Range(c.min, c.max), c = KEY }
+        lines[#lines + 1] = { l = "  crit " .. Pct(c.crit), r = Range(c.min * 1.5, c.max * 1.5), c = SUB, rc = SUB }
+        lines[#lines + 1] = { l = "Average", r = string.format("%d  (%d with crits)",
+            R(row.heal / c.critMult), R(row.heal)), c = KEY }
+
+    elseif c.kind == "hot" then
+        lines[#lines + 1] = { l = "Tick", r = string.format("%d  x%d, every 3s", R(row.heal / c.ticks), c.ticks), c = KEY }
+        lines[#lines + 1] = { l = "Total", r = string.format("%d  over %ds", R(row.heal), c.duration), c = KEY }
+
+    elseif c.kind == "hybrid" then
+        local ticks = c.duration / 3
+        local direct = c.direct / c.critMult
+        lines[#lines + 1] = { l = "Direct", r = Range(c.min, c.max), c = KEY }
+        lines[#lines + 1] = { l = "  crit " .. Pct(c.crit), r = Range(c.min * 1.5, c.max * 1.5), c = SUB, rc = SUB }
+        lines[#lines + 1] = { l = "Tick", r = string.format("%d  x%d, every 3s", R(c.hot / ticks), ticks), c = KEY }
+        lines[#lines + 1] = { l = "HoT total", r = string.format("%d  over %ds", R(c.hot), c.duration), c = KEY }
+        lines[#lines + 1] = { l = "Total", r = string.format("%d  (%d with crits)",
+            R(direct + c.hot), R(row.heal)), c = KEY }
+
+    elseif c.kind == "lifebloom" then
+        lines[#lines + 1] = { l = "Tick", r = string.format("%d  x7, every 1s", R(c.tick)), c = KEY }
+        lines[#lines + 1] = { l = "  at 2 / 3 stacks", r = string.format("%d / %d", R(c.tick * 2), R(c.tick * 3)),
+            c = SUB, rc = SUB }
+        lines[#lines + 1] = { l = "HoT total", r = string.format("%d  over %ds", R(c.hot), c.duration), c = KEY }
+        lines[#lines + 1] = { l = "Bloom", r = string.format("%d  (crit %d)", R(c.bloom), R(c.bloom * 1.5)), c = KEY }
+        lines[#lines + 1] = { l = "Total", r = string.format("%d  (7 ticks + bloom)", R(c.hot + c.bloom)), c = KEY }
+        -- rolling: refreshed every 6s, so 6 ticks a cast at the stack and never a bloom
+        lines[#lines + 1] = { l = "Rolled at 3 stacks", r = string.format("%d a refresh, no bloom",
+            R(c.tick * 3 * 6)), c = KEY }
+    end
+
+    lines[#lines + 1] = { l = "HPM / HPS", r = string.format("%.2f  /  %d", row.hpm, R(row.hps)), c = KEY }
+
+    if row.overheal then
+        lines[#lines + 1] = { l = "After your overheal", r = string.format("%d  (%s wasted, %s)",
+            R(row.effHeal), Pct(row.overheal.frac),
+            row.overheal.scope == "family" and "family average" or "measured"), c = KEY, rc = SUB }
+    end
+    if c.penalty < 0.999 then
+        lines[#lines + 1] = { l = "Downranked", r = string.format("+healing x%.2f", c.penalty), c = WARN, rc = WARN }
+    end
+
+    if detail then
+        lines[#lines + 1] = {}
+        local SHORT = { ["Empowered Rejuvenation"] = "Emp. Rejuvenation", ["Empowered Touch"] = "Emp. Touch" }
+        local function term(label, base, bonus, amount, coef, mult, multName)
+            local t = string.format("%d healing x %.3f coef", R(bonus), coef)
+            if c.penalty < 0.999 then t = t .. string.format(" x %.2f downrank", c.penalty) end
+            if mult and mult > 1.0001 then
+                t = t .. string.format(" x %.2f %s", mult, SHORT[multName] or multName)
+            end
+            lines[#lines + 1] = { l = "  " .. label, r = string.format("%d base + %d", R(base), R(amount)),
+                c = SUB, rc = SUB }
+            lines[#lines + 1] = { l = "    " .. t, c = MUTED }
+        end
+        if c.kind == "direct" then
+            term("direct", c.base + (c.relicFlat or 0), c.bonus, c.bonusOut, c.coef, c.bonusMult, c.bonusMultName)
+        elseif c.kind == "hot" then
+            term("HoT", c.base + (c.relicFlat or 0), c.bonus, c.bonusOut, c.coef, c.bonusMult, c.bonusMultName)
+        elseif c.kind == "hybrid" then
+            term("direct", c.base + (c.relicFlat or 0), c.bonus, c.directBonus, c.directCoef)
+            term("HoT", c.hotBase, c.bonus, c.hotBonus, c.hotCoef, c.bonusMult, c.bonusMultName)
+        elseif c.kind == "lifebloom" then
+            term("HoT", c.base + (c.relicFlat or 0), c.bonus, c.hotBonus, c.hotCoef, c.bonusMult, c.bonusMultName)
+            term("bloom", c.bloomBase, c.bonus, c.bloomBonus, c.bloomCoef, c.bonusMult, c.bonusMultName)
+        end
+        local talentName = (c.kind == "hot") and "Gift of Nature, Improved Rejuvenation" or "Gift of Nature"
+        if c.talentMult > 1.0001 then
+            lines[#lines + 1] = { l = string.format("  then x %.2f  %s", c.talentMult, talentName), c = SUB }
+        end
+        if ctx.treeAura > 0 then
+            lines[#lines + 1] = { l = string.format("  +healing includes %d Tree of Life aura", R(ctx.treeAura)), c = SUB }
+        end
+    else
+        lines[#lines + 1] = { l = "Shift: how it is calculated", c = MUTED }
+    end
+    return lines
+end
+
+--------------------------------------------------------------------------------
 -- Column glossary, shown on the dashboard's header row. This used to be a
 -- paragraph under the table; at 760px it wrapped onto the rows below it.
 --------------------------------------------------------------------------------

@@ -7,7 +7,7 @@ tab:SetAllPoints(MD.optionsFrame)
 tab:Hide()
 
 local recordCB, rebindCB, fullHpSlider, floorSlider, runsCB, nextPullCB
-local lockCB, restCB, tipCB, cdCB, muteCB, drinkCB, minimapCB, halfLifeSlider, confSlider, treeAuraCB, ngCB, calibCB
+local lockCB, restCB, tipCB, cdCB, muteCB, drinkCB, minimapCB, spellTipCB, halfLifeSlider, confSlider, treeAuraCB, ngCB, calibCB
 
 --------------------------------------------------------------------------------
 -- OOM widget
@@ -136,7 +136,7 @@ end
 -- Misc
 --------------------------------------------------------------------------------
 local function CreateMiscPane(anchor)
-    local pane = UI.CreateTitledPane(tab, "Misc", 205, 147)
+    local pane = UI.CreateTitledPane(tab, "Misc", 205, 169)
     pane:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
 
     minimapCB = UI.CreateCheckButton(pane, "Show minimap button", function(checked)
@@ -145,9 +145,16 @@ local function CreateMiscPane(anchor)
     end)
     minimapCB:SetPoint("TOPLEFT", pane, 5, -27)
 
+    spellTipCB = UI.CreateCheckButton(pane, "Heals on spell tooltips", function(checked)
+        MD.db.spellTooltip = checked
+    end, "Each tick, the HoT total, the direct range and the bloom of the",
+        "exact rank under the mouse, on your bars and in the spellbook.",
+        "Hold Shift over a spell for how the numbers are calculated.")
+    spellTipCB:SetPoint("TOPLEFT", minimapCB, "BOTTOMLEFT", 0, -8)
+
     local debugBtn = UI.CreateButton(pane, "Debug Console", "accent-hover", { 150, 17 }, false, false, nil, nil,
         "Debug Console", "Live log of regen, mana ticks, casts and the clock state.", "Enable logging there; Copy exports it as text.")
-    debugBtn:SetPoint("TOPLEFT", minimapCB, "BOTTOMLEFT", 0, -12)
+    debugBtn:SetPoint("TOPLEFT", spellTipCB, "BOTTOMLEFT", 0, -12)
     debugBtn:SetScript("OnClick", function()
         if MD.ToggleDebugConsole then MD:ToggleDebugConsole() end
     end)
@@ -260,6 +267,7 @@ local function ShowTab(which)
     muteCB:SetChecked(MD.db.muted)
     drinkCB:SetChecked(MD.db.drinkReminder)
     minimapCB:SetChecked(not MD.db.minimap.hide)
+    spellTipCB:SetChecked(MD.db.spellTooltip ~= false)
     halfLifeSlider:SetValue(MD.db.halfLife or 15)
     confSlider:SetValue(math.floor((MD.db.oomConfidence or 0.7) * 100 + 0.5))
     treeAuraCB:SetChecked(MD.db.treeAura ~= false)

@@ -335,6 +335,15 @@ log says it did.
   strategy objectives reading the solver's pool, and the Review tab able to say which planner
   coached a fight.
 
+- [x] **v0.14.9 — heal values on the game's spell tooltips** (the author's request, after
+  Dynamic Tooltip). The dashboard compares ranks; a tooltip answers "what does this button
+  do". `UI/SpellTooltip.lua` hooks the game's tooltip and appends `MD.Tip:Spell`: Rejuvenation's
+  tick x4 and total; Regrowth's direct range, crit range, tick x7, HoT total and whole cast;
+  Lifebloom's tick at 1/2/3 stacks, HoT total, bloom, total and rolled-at-3 value; Healing
+  Touch's range; what Swiftmend eats; downrank and measured-overheal lines; Shift for the
+  derivation. Same RankMath row as the dashboard, live context only. `tools/spelltip.lua`
+  asserts every number against the simulator's own SpellKit and the dashboard's heal.
+
 Known and deliberately not fixed:
 
 - **Regrowth's DIRECT reads about 13% low** against the whole Warcraft Logs corpus: on every

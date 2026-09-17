@@ -678,6 +678,29 @@ never searches.
 Report whether the second column on a forced fight looks like it is describing the same fight
 you played, or obviously not.
 
+## 33. Heal values on your spell tooltips (v0.14.9)
+Hover any healing spell on your action bars or in the spellbook. Under the game's own text
+there is now a **ManaDemon** block for *that exact rank*, at your current +healing and talents:
+
+- **Rejuvenation:** each tick and how many, and the total over 12s.
+- **Regrowth:** the direct heal's range and its crit range, each HoT tick, the HoT total, and
+  the whole cast (with and without crits).
+- **Lifebloom:** each tick at 1 stack and at 2 / 3, the HoT total, the bloom (and its crit),
+  the total if you let it bloom, and what one refresh is worth when you roll it at 3 stacks.
+- **Healing Touch:** the range, the crit range, the average.
+- **Swiftmend:** how much it gives by eating your Rejuvenation or your Regrowth.
+- A downranked spell says so and by how much its +healing is cut.
+- If your overheal on that spell has been measured, what it heals after it.
+
+**Hold Shift** while hovering for how each number is built (base heal, +healing times
+coefficient, talents). Turn it off with `/md spelltip` or Settings -> General -> Misc.
+
+Report: (1) any number that disagrees with what the spell actually does on a target that is
+missing health (a Lifebloom tick at 1 stack and a non-crit Regrowth are the easiest to read
+off the combat text); (2) any tooltip where the block appears twice or not at all -- action
+bar, spellbook, a spell linked in chat, and with ElvUI's tooltip skin if you use it;
+(3) whether Shift updates the tooltip without moving the mouse.
+
 ## Reporting
 Paste the `.logs/*.txt` files (or their names if committed locally) and, for §3/§4, the
 raw numbers. `/md profile` output is welcome with any report. I turn them into
